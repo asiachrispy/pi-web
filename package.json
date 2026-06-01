@@ -23,6 +23,7 @@
     "lint": "eslint .",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:workbench": "node scripts/workbench-smoke.mjs",
     "release": "npm version patch --no-git-tag-version && npm run build && npm publish --access public"
   },
   "dependencies": {
@@ -44,6 +45,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "playwright": "^1.60.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.2.2",
     "typescript": "^5",
