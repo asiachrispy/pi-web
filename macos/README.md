@@ -39,37 +39,35 @@ swift build -c release
 - 内嵌 `node` 子进程在沙盒下是否能继承 security-scoped 访问，需联调 agent 工具读文件路径
 - 打包脚本尚未嵌入 Node；见下文
 
-## 打包（实验性）
-
-需先在本机执行 `npm run build`（生成 `.next/`），再：
+## 打包（本机安装测试）
 
 ```bash
-chmod +x scripts/package-macos-app.sh
-./scripts/package-macos-app.sh
+cd /path/to/pi-web
+npm run package:macos
 # 输出：dist/macos/Pi.app
 ```
 
 脚本会：
 
-1. `swift build -c release`（PiWorkbench）
-2. 复制 `bin/`、`.next/`、`public/`、`package.json`、`next.config.ts` 到 `Pi.app/Contents/Resources/pi-web/`
-3. 写入占位 `Contents/Resources/node/README.txt`
+1. `npm run build`（生产 `.next`）
+2. `swift build -c release`（PiWorkbench）
+3. 复制 `bin/`、`.next/`、`public/`、`package.json`、`package-lock.json`、`next.config.ts` 与 `node_modules` 到 `Contents/Resources/pi-web/`
+4. 下载并嵌入 Node（默认 v22.16.0，`NODE_VERSION` 可覆盖）到 `Contents/Resources/node/bin/node`
+5. 本地 ad-hoc `codesign`（非公证）
 
-### Embedded Node 策略（TODO）
+安装与首次打开：
 
-M1 里程碑要求「新机器无需单独安装 Node」。计划：
+```bash
+cp -R dist/macos/Pi.app /Applications/
+xattr -cr /Applications/Pi.app   # 未公证包若被拦截，执行后再双击
+open /Applications/Pi.app
+```
 
-1. 在 CI/发布流程下载固定版本 Node（macOS arm64 + x64 universal 或分架构包）
-2. 解压到 `Pi.app/Contents/Resources/node/bin/node`
-3. `ServerManager` 已实现：`.app` 内优先 `Contents/Resources/node/bin/node`，再 `NODE` 环境变量与 `PATH`
-4. 与 pi-web npm 依赖一起 vendoring，版本写入 release notes
-
-当前 **未实现** embed；`package-macos-app.sh` 仅组装 bundle 结构。
+`SKIP_NODE_EMBED=1 ./scripts/package-macos-app.sh` 可跳过内嵌 Node（仅用本机 PATH 里的 node，不适合 M1「免 Node」验收）。
 
 ## M1 交付物（待办）
 
-- [ ] Xcode 工程 + `.app` 签名 / 公证
-- [ ] Bundle 内嵌固定 Node + `npm run build` 后的 pi-web 产物（脚本骨架已有）
+- [ ] Apple 开发者签名 / 公证（当前仅 ad-hoc，本机测试用）
 - [ ] App Sandbox entitlements 与工作区 bookmark 联调
 
 当前仓库内为 **可开发的 SwiftPM 可执行文件**，用于联调 `piNative`、通知深链与健康检查。
