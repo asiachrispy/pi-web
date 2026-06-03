@@ -1,4 +1,4 @@
-import { notifyAgentFinished } from "@/lib/push-notifications";
+import { readCachedPiWebPreferences } from "@/lib/pi-web-preferences-cache";
 
 export interface NativeNotificationBridge {
   showNotification(input: { title?: string; body?: string; sessionId: string; sessionName?: string }): void;
@@ -10,10 +10,18 @@ export function getNativeBridge(): NativeNotificationBridge | null {
   return bridge?.showNotification ? bridge : null;
 }
 
+export function notificationsEnabled(): boolean {
+  const prefs = readCachedPiWebPreferences();
+  return prefs.notificationsEnabled !== false;
+}
+
+/** Client-safe: native shell bridge or POST to server Web Push fallback. */
 export async function notifyAgentEnd(input: {
   sessionId: string;
   sessionName?: string;
 }): Promise<void> {
+  if (!notificationsEnabled()) return;
+
   const bridge = getNativeBridge();
   if (bridge) {
     bridge.showNotification({
@@ -24,5 +32,10 @@ export async function notifyAgentEnd(input: {
     });
     return;
   }
-  await notifyAgentFinished(input);
+
+  await fetch("/api/notifications/agent-end", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
 }

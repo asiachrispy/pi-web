@@ -5,6 +5,7 @@ import { join } from "path";
 import { completeSimple, type AssistantMessage } from "@earendil-works/pi-ai";
 import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { requireApiAuth } from "@/lib/api-auth";
+import { isChatTestableModelId, normalizeModelEntry, normalizeProviderEntry, isReasoningEffortUnsupportedError } from "@/lib/models-config-normalize";
 
 export const dynamic = "force-dynamic";
 
@@ -40,14 +41,22 @@ export async function POST(req: Request) {
 
     const modelId = typeof body.model.id === "string" ? body.model.id.trim() : "";
     if (!modelId) return NextResponse.json({ ok: false, error: "Model ID is required" }, { status: 400 });
+    if (!isChatTestableModelId(modelId)) {
+      return NextResponse.json({
+        ok: false,
+        error: "Connection test uses chat completions and is not available for image/video generation models.",
+      }, { status: 400 });
+    }
 
     tempDir = mkdtempSync(join(tmpdir(), "pi-web-model-test-"));
     const modelsPath = join(tempDir, "models.json");
+    const provider = normalizeProviderEntry(body.provider);
+    const modelEntry = normalizeModelEntry({ ...body.model, id: modelId });
     writeFileSync(modelsPath, JSON.stringify({
       providers: {
         [providerName]: {
-          ...body.provider,
-          models: [{ ...body.model, id: modelId }],
+          ...provider,
+          models: [modelEntry],
         },
       },
     }, null, 2), "utf8");
@@ -88,11 +97,19 @@ export async function POST(req: Request) {
 
       const latencyMs = Date.now() - startedAt;
       if (message.stopReason === "error" || message.stopReason === "aborted") {
+        const baseError = message.errorMessage ?? (controller.signal.aborted ? "Test timed out" : "Model returned an error");
+        let hint = status === 404
+          ? ` Model "${modelId}" may be wrong for ${model.baseUrl} — check the provider's API docs.`
+          : "";
+        if (isReasoningEffortUnsupportedError(baseError)) {
+          hint = " This model does not support reasoning/thinking parameters. Disable the Reasoning checkbox for this model.";
+        }
         return NextResponse.json({
           ok: false,
-          error: message.errorMessage ?? (controller.signal.aborted ? "Test timed out" : "Model returned an error"),
+          error: `${baseError}${hint}`,
           latencyMs,
           status,
+          disableReasoning: isReasoningEffortUnsupportedError(baseError) || undefined,
         });
       }
 

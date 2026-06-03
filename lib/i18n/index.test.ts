@@ -47,10 +47,10 @@ describe("i18n translation lookup", () => {
   });
 
   it("exposes model configuration copy in both locales", () => {
-    expect(translate("en", "accounts.openModelsConfig")).toBe("Edit models.json");
-    expect(translate("zh-CN", "accounts.openModelsConfig")).toBe("编辑 models.json");
-    expect(translate("en", "accounts.perSessionModelHint")).toContain("selector");
-    expect(translate("zh-CN", "accounts.perSessionModelHint")).toContain("模型选择器");
+    expect(translate("en", "accounts.configureModels")).toBe("Configure models");
+    expect(translate("zh-CN", "accounts.configureModels")).toBe("配置模型");
+    expect(translate("en", "modelsConfig.perSessionModelHint")).toContain("selector");
+    expect(translate("zh-CN", "modelsConfig.perSessionModelHint")).toContain("模型选择器");
   });
 
   it("interpolates named params", () => {

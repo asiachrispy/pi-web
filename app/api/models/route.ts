@@ -1,6 +1,6 @@
-import { AuthStorage, ModelRegistry, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { SettingsManager } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@/lib/agent-dir";
-import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { listAvailableModels } from "@/lib/available-models";
 import { requireApiAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
@@ -9,36 +9,26 @@ export async function GET(req: Request) {
   const rejected = requireApiAuth(req);
   if (rejected) return rejected;
 
-  const nameMap = new Map<string, string>();
-  let modelList: { id: string; name: string; provider: string }[] = [];
+  const { modelList, nameMap, thinkingLevels, thinkingLevelMaps } = listAvailableModels();
   let defaultModel: { provider: string; modelId: string } | null = null;
-  const thinkingLevels: Record<string, string[]> = {};
-  const thinkingLevelMaps: Record<string, Record<string, string | null>> = {};
 
   try {
-    const agentDir = getAgentDir();
-    const authStorage = AuthStorage.create();
-    const registry = ModelRegistry.create(authStorage);
-    const available = registry.getAvailable();
-    modelList = available.map((m: { id: string; name: string; provider: string }) => ({
-      id: m.id,
-      name: m.name,
-      provider: m.provider,
-    }));
-    for (const m of available) {
-      const key = `${m.provider}:${m.id}`;
-      nameMap.set(key, m.name);
-      thinkingLevels[key] = getSupportedThinkingLevels(m);
-      if (m.thinkingLevelMap) thinkingLevelMaps[key] = m.thinkingLevelMap;
-    }
-
-    const settings = SettingsManager.create(process.cwd(), agentDir);
+    const settings = SettingsManager.create(process.cwd(), getAgentDir());
     const provider = settings.getDefaultProvider();
     const modelId = settings.getDefaultModel();
-    if (provider) {
-      defaultModel = { provider, modelId: modelId ?? available[0]?.id ?? "" };
+    if (provider && modelId) {
+      const match = modelList.find((m) => m.provider === provider && m.id === modelId);
+      if (match) {
+        defaultModel = { provider, modelId };
+      }
     }
-  } catch { /* return empty */ }
+  } catch { /* ignore */ }
 
-  return Response.json({ models: Object.fromEntries(nameMap), modelList, defaultModel, thinkingLevels, thinkingLevelMaps });
+  return Response.json({
+    models: Object.fromEntries(nameMap),
+    modelList,
+    defaultModel,
+    thinkingLevels,
+    thinkingLevelMaps,
+  });
 }

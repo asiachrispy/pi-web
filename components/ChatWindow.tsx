@@ -6,6 +6,7 @@ import { MessageView } from "./MessageView";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMinimap, useMessageRefs } from "./ChatMinimap";
 import { useAgentSession, type AgentPhase } from "@/hooks/useAgentSession";
+import { getNativeBridge, notifyAgentEnd } from "@/lib/notify-agent-end";
 import { useAudio } from "@/hooks/useAudio";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { invalidateControlResource } from "@/hooks/useControlCollection";
@@ -31,7 +32,6 @@ interface Props {
   scene?: Scene | null;
   toolMode?: ToolMode;
   advancedMode?: boolean;
-  onOpenAccounts?: () => void;
   onOpenModels?: () => void;
 }
 
@@ -175,7 +175,7 @@ function SceneHeader({
   );
 }
 
-export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSessionStatsChange, onContextUsageChange, scene, toolMode = "simple", advancedMode = false, onOpenAccounts, onOpenModels }: Props) {
+export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSessionStatsChange, onContextUsageChange, scene, toolMode = "simple", advancedMode = false, onOpenModels }: Props) {
   const { t } = useI18n();
   const {
     loading, error, messages, entryIds, streamState,
@@ -190,9 +190,10 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
     handleSend, handleAbort, handleFork, handleNavigate, handleModelChange,
     handleCompact, handleSteer, handleFollowUp, handleAbortCompaction,
     handleToolPresetChange, handleThinkingLevelChange, handleAgentEventRef,
+    sessionIdRef,
   } = useAgentSession({
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
-    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, scene,
+    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, scene, toolMode,
   });
 
   const { soundEnabled, onSoundToggle, playDoneSound } = useAudio();
@@ -200,6 +201,10 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
   playDoneSoundRef.current = playDoneSound;
   const soundEnabledRef = useRef(soundEnabled);
   soundEnabledRef.current = soundEnabled;
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
 
   // Wrap agent event handler to play sound on agent_end and to push the latest
   // assistant output into product-session metadata so the history view can
@@ -212,6 +217,10 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
           playDoneSoundRef.current();
         }
         const id = sessionIdRef.current;
+        if (id && getNativeBridge()) {
+          const sessionName = sessionRef.current?.name ?? id;
+          void notifyAgentEnd({ sessionId: id, sessionName }).catch(() => {});
+        }
         const activeScene = sceneRef.current;
         if (id && activeScene) {
           const summary = lastResultSummaryRef.current;
@@ -234,7 +243,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
       }
       origHandler?.(event);
     };
-  }, [origHandler, handleAgentEventRef]);
+  }, [origHandler, handleAgentEventRef, sessionIdRef]);
 
   // Push session stats up to AppShell for the top bar.
   // Compare scalar fields to avoid loops from new object identity each render.
@@ -300,10 +309,6 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
   );
   const lastResultSummaryRef = useRef(lastResultSummary);
   lastResultSummaryRef.current = lastResultSummary;
-  const sessionIdRef = useRef(session?.id);
-  sessionIdRef.current = session?.id;
-  const sceneRef = useRef(scene);
-  sceneRef.current = scene;
   const suggestedActionId = useMemo(
     () => (scene ? suggestNextStep(latestAssistantText, scene, lastActionIdRef.current)?.id ?? null : null),
     [latestAssistantText, scene],
@@ -352,7 +357,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
     URL.revokeObjectURL(url);
     setSceneActionStatus(t("settings.exportConversationAction"));
     window.setTimeout(() => setSceneActionStatus(null), 1500);
-  }, [session?.id, t]);
+  }, [session?.id, sessionIdRef, t]);
 
   const runSceneAction = useCallback((action: SceneAction) => {
     if (action.type === "copy") {
@@ -437,26 +442,15 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
               <div className="text-[13px] font-semibold text-text">{t("accounts.needAccountTitle")}</div>
               <p className="mt-1 text-[12px] leading-5 text-text-muted">{t("accounts.needAccountDescription")}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {onOpenModels && (
-                <button
-                  type="button"
-                  onClick={onOpenModels}
-                  className="rounded-[7px] border border-border bg-bg-elevated px-3 py-2 text-[12px] font-medium text-text hover:bg-bg-hover"
-                >
-                  {t("accounts.openModelsConfig")}
-                </button>
-              )}
-              {onOpenAccounts && (
-                <button
-                  type="button"
-                  onClick={onOpenAccounts}
-                  className="rounded-[7px] bg-accent px-3 py-2 text-[12px] font-semibold text-white hover:bg-accent-hover"
-                >
-                  {t("accounts.goToAccounts")}
-                </button>
-              )}
-            </div>
+            {onOpenModels && (
+              <button
+                type="button"
+                onClick={onOpenModels}
+                className="rounded-[7px] bg-accent px-3 py-2 text-[12px] font-semibold text-white hover:bg-accent-hover"
+              >
+                {t("accounts.configureModels")}
+              </button>
+            )}
           </div>
         </div>
       )}

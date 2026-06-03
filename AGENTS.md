@@ -10,6 +10,14 @@ Typecheck: `node_modules/.bin/tsc --noEmit`
 Lint: `npm run lint`
 **Never run `next build` during dev** — pollutes `.next/` and breaks `npm run dev`.
 
+After any code change (not docs-only), run and fix until all pass:
+
+```bash
+node_modules/.bin/tsc --noEmit && npm run lint && npm run test:run
+```
+
+If you add or change a test file, run `npm run test:run` again after fixing failures.
+
 ---
 
 ## Architecture
@@ -32,6 +40,8 @@ Browser                Next.js Server              AgentSession (in-process)
 **Session browsing** (read-only): reads `.jsonl` files directly via `lib/session-reader.ts` — no AgentSession created.  
 **Sending a message**: `startRpcSession()` in `lib/rpc-manager.ts` creates an AgentSession in-process.
 
+**macOS App (M1)**: Shell probes `GET /api/health` (loopback only). Web ↔ shell IPC via `window.piNative` — see `docs/macos-shell-contract.md`, `lib/pi-native.d.ts`, `lib/notify-agent-end.ts`. M1-A `.app` packaging is out of this repo.
+
 ---
 
 ## File Map
@@ -48,6 +58,9 @@ app/api/
   files/[...path]/route.ts        GET file contents for viewer
   models/route.ts                 GET { models, modelList, defaultModel }
   models-config/route.ts          GET/PUT — read/write ~/.pi/agent/models.json
+  health/route.ts                 GET { ok, version } — loopback probe for macOS shell
+  onboarding/status/route.ts      GET onboarding gate fields
+  notifications/agent-end/route.ts POST Web Push fallback when no piNative
 
 lib/
   rpc-manager.ts      AgentSessionWrapper + registry + startRpcSession

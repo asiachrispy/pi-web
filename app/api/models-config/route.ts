@@ -4,6 +4,8 @@ import { join, dirname } from "path";
 import { getAgentDir } from "@/lib/agent-dir";
 import { rejectUnsafeMutation } from "@/lib/local-request-guard";
 import { requireApiAuth } from "@/lib/api-auth";
+import { normalizeModelsJson, type NormalizedModelsJson } from "@/lib/models-config-normalize";
+import { destroyAllRpcSessions } from "@/lib/rpc-manager";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +23,7 @@ function readModelsJson(): Record<string, unknown> {
   }
 }
 
-function writeModelsJson(data: Record<string, unknown>): void {
+function writeModelsJson(data: NormalizedModelsJson): void {
   const path = getModelsPath();
   const dir = dirname(path);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -40,8 +42,8 @@ export async function PUT(req: Request) {
 
   try {
     const body = await req.json() as Record<string, unknown>;
-    writeModelsJson(body);
-    // Model registry refreshes on each /api/models request (no local cache to invalidate)
+    writeModelsJson(normalizeModelsJson(body));
+    destroyAllRpcSessions();
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });

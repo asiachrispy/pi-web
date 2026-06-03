@@ -5,6 +5,36 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { rejectUnsafeMutation } from "@/lib/local-request-guard";
 import { requireApiAuth } from "@/lib/api-auth";
 
+async function sendToAgentSession(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  const existing = getRpcSession(id);
+  if (existing?.isAlive()) {
+    try {
+      return await existing.send(body);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (body.type === "set_model" && message.includes("Model not found")) {
+        existing.destroy();
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  const filePath = await resolveSessionPath(id);
+  if (!filePath) {
+    const err = new Error("Session not found");
+    (err as Error & { status: number }).status = 404;
+    throw err;
+  }
+
+  const cwd = SessionManager.open(filePath).getHeader()?.cwd ?? process.cwd();
+  const { session } = await startRpcSession(id, filePath, cwd);
+  return session.send(body);
+}
+
 // POST /api/agent/[id] - Send a command to an existing session
 export async function POST(
   req: Request,
@@ -17,27 +47,11 @@ export async function POST(
 
   try {
     const body = await req.json() as { type: string; [key: string]: unknown };
-
-    // Fast path: already-running session
-    const existing = getRpcSession(id);
-    if (existing?.isAlive()) {
-      const result = await existing.send(body);
-      return NextResponse.json({ success: true, data: result });
-    }
-
-    const filePath = await resolveSessionPath(id);
-    if (!filePath) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 });
-    }
-
-    const cwd = SessionManager.open(filePath).getHeader()?.cwd ?? process.cwd();
-
-    const { session } = await startRpcSession(id, filePath, cwd);
-    const result = await session.send(body);
-
+    const result = await sendToAgentSession(id, body);
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    const status = (error as Error & { status?: number }).status ?? 500;
+    return NextResponse.json({ error: String(error) }, { status });
   }
 }
 

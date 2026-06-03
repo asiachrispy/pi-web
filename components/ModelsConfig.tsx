@@ -28,6 +28,7 @@ import PerplexityColorIcon from "@lobehub/icons/es/Perplexity/components/Color";
 import TogetherColorIcon from "@lobehub/icons/es/Together/components/Color";
 import GrokIcon from "@lobehub/icons/es/Grok/components/Mono";
 import { useI18n } from "@/lib/i18n/provider";
+import { isChatTestableModelId, normalizeModelCost, normalizeModelsJson, isPartialDecimalInput, parseCostFieldValue } from "@/lib/models-config-normalize";
 
 type IconComponent = React.ComponentType<{ size?: number | string; style?: React.CSSProperties }>;
 
@@ -126,7 +127,7 @@ type ModelTestState =
   | { phase: "idle" }
   | { phase: "testing" }
   | { phase: "success"; latencyMs?: number; status?: number; responseText?: string }
-  | { phase: "error"; message: string; latencyMs?: number; status?: number };
+  | { phase: "error"; message: string; latencyMs?: number; status?: number; reasoningDisabled?: boolean };
 
 type Selection =
   | { type: "provider"; name: string }
@@ -239,6 +240,30 @@ function SecretTextInput({
         )}
       </button>
     </div>
+  );
+}
+
+function DecimalInput({
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onBlur?: () => void;
+  placeholder?: string;
+}) {
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+      placeholder={placeholder}
+      style={inputStyle}
+    />
   );
 }
 
@@ -504,11 +529,43 @@ function ModelDetail({
 }) {
   const { t } = useI18n();
   const [testState, setTestState] = useState<ModelTestState>({ phase: "idle" });
+  const [costDraft, setCostDraft] = useState<Partial<Record<keyof NonNullable<ModelEntry["cost"]>, string>>>({});
   const set = <K extends keyof ModelEntry>(k: K, v: ModelEntry[K]) => onChange({ ...model, [k]: v });
-  const costVal = (k: keyof NonNullable<ModelEntry["cost"]>) => model.cost?.[k] !== undefined ? String(model.cost[k]) : "";
+
+  useEffect(() => {
+    setCostDraft({});
+  }, [providerName, model.id]);
+
+  const costVal = (k: keyof NonNullable<ModelEntry["cost"]>) => {
+    if (costDraft[k] !== undefined) return costDraft[k]!;
+    return model.cost?.[k] !== undefined ? String(model.cost[k]) : "";
+  };
+
+  const commitCostField = (k: keyof NonNullable<ModelEntry["cost"]>, raw: string) => {
+    const next = { ...(model.cost ?? {}) };
+    const parsed = parseCostFieldValue(raw);
+    if (parsed === undefined) delete next[k];
+    else next[k] = parsed;
+    onChange({ ...model, cost: normalizeModelCost(next) });
+  };
+
   const setCost = (k: keyof NonNullable<ModelEntry["cost"]>, v: string) => {
-    const n = parseFloat(v);
-    onChange({ ...model, cost: { ...(model.cost ?? {}), [k]: isNaN(n) ? undefined : n } });
+    if (!isPartialDecimalInput(v)) return;
+    setCostDraft((draft) => ({ ...draft, [k]: v }));
+    if (v === "" || (!v.endsWith(".") && v !== "-" && v !== "-.")) {
+      commitCostField(k, v);
+    }
+  };
+
+  const handleCostBlur = (k: keyof NonNullable<ModelEntry["cost"]>) => {
+    const draft = costDraft[k];
+    if (draft === undefined) return;
+    commitCostField(k, draft);
+    setCostDraft((draftState) => {
+      const next = { ...draftState };
+      delete next[k];
+      return next;
+    });
   };
   const testSummary = useMemo(() => {
     if (testState.phase === "idle") return null;
@@ -523,12 +580,17 @@ function ModelDetail({
     return [t("common.failed"), ...meta, testState.message].filter(Boolean).join(" · ");
   }, [testState, t]);
 
+  const chatTestSupported = isChatTestableModelId(model.id);
+  const lowercaseIdHint = model.id.trim() && model.id !== model.id.toLowerCase()
+    ? t("modelsConfig.modelIdCaseHint", { suggestedId: model.id.toLowerCase() })
+    : null;
+
   useEffect(() => {
     setTestState({ phase: "idle" });
   }, [providerName, provider.baseUrl, provider.api, provider.apiKey, model.id, model.api]);
 
   const handleTest = useCallback(async () => {
-    if (!model.id.trim() || testState.phase === "testing") return;
+    if (!model.id.trim() || testState.phase === "testing" || !isChatTestableModelId(model.id)) return;
     setTestState({ phase: "testing" });
     try {
       const res = await fetch("/api/models-config/test", {
@@ -542,13 +604,20 @@ function ModelDetail({
         latencyMs?: number;
         status?: number;
         responseText?: string;
+        disableReasoning?: boolean;
       };
       if (!res.ok || !d.ok) {
+        let reasoningDisabled = false;
+        if (d.disableReasoning && model.reasoning) {
+          onChange({ ...model, reasoning: undefined, thinkingLevelMap: undefined });
+          reasoningDisabled = true;
+        }
         setTestState({
           phase: "error",
           message: d.error ?? `HTTP ${res.status}`,
           latencyMs: d.latencyMs,
           status: d.status,
+          reasoningDisabled,
         });
         return;
       }
@@ -561,18 +630,41 @@ function ModelDetail({
     } catch (e) {
       setTestState({ phase: "error", message: e instanceof Error ? e.message : String(e) });
     }
-  }, [model, provider, providerName, testState.phase]);
+  }, [model, provider, providerName, testState.phase, onChange]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <SectionTitle>{t("modelsConfig.model")}</SectionTitle>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {!chatTestSupported && model.id.trim() && (
+            <span
+              title={t("modelsConfig.chatTestNotSupported")}
+              style={{
+                maxWidth: 280,
+                height: 24,
+                padding: "0 8px",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                background: "var(--bg-panel)",
+                color: "var(--text-muted)",
+                fontSize: 11,
+                display: "inline-flex",
+                alignItems: "center",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                boxSizing: "border-box",
+              }}
+            >
+              {t("modelsConfig.chatTestNotSupportedShort")}
+            </span>
+          )}
           {testSummary && (
             <span
               title={testSummary}
               style={{
-                maxWidth: 260,
+                maxWidth: 280,
                 height: 24,
                 padding: "0 8px",
                 border: `1px solid ${testState.phase === "error" ? "#fecaca" : testState.phase === "success" ? "#bbf7d0" : "var(--border)"}`,
@@ -593,16 +685,16 @@ function ModelDetail({
           )}
           <button
             onClick={handleTest}
-            disabled={!model.id.trim() || testState.phase === "testing"}
-            title={t("modelsConfig.testModelConnection")}
+            disabled={!model.id.trim() || testState.phase === "testing" || !chatTestSupported}
+            title={chatTestSupported ? t("modelsConfig.testModelConnection") : t("modelsConfig.chatTestNotSupported")}
             style={{
               height: 24,
               padding: "0 8px",
               background: testState.phase === "success" ? "#16a34a" : "none",
               border: `1px solid ${testState.phase === "success" ? "#16a34a" : "var(--border)"}`,
               borderRadius: 4,
-              color: testState.phase === "success" ? "#fff" : (!model.id.trim() || testState.phase === "testing") ? "var(--text-dim)" : "var(--text-muted)",
-              cursor: (!model.id.trim() || testState.phase === "testing") ? "not-allowed" : "pointer",
+              color: testState.phase === "success" ? "#fff" : (!model.id.trim() || testState.phase === "testing" || !chatTestSupported) ? "var(--text-dim)" : "var(--text-muted)",
+              cursor: (!model.id.trim() || testState.phase === "testing" || !chatTestSupported) ? "not-allowed" : "pointer",
               fontSize: 11,
               display: "inline-flex",
               alignItems: "center",
@@ -629,6 +721,16 @@ function ModelDetail({
         <Field label={t("modelsConfig.idRequired")}><TextInput value={model.id} onChange={(v) => set("id", v)} placeholder="model-id" mono /></Field>
         <Field label={t("modelsConfig.name")}><TextInput value={model.name ?? ""} onChange={(v) => set("name", v || undefined)} placeholder="Display name" /></Field>
       </div>
+      {lowercaseIdHint && (
+        <div style={{ marginTop: -8, fontSize: 11, color: "var(--text-dim)", lineHeight: 1.5 }}>
+          {lowercaseIdHint}
+        </div>
+      )}
+      {!chatTestSupported && model.id.trim() && (
+        <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5, padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-panel)" }}>
+          {t("modelsConfig.chatTestNotSupported")}
+        </div>
+      )}
 
       <Field label={t("modelsConfig.apiOverride")}>
         <Select value={model.api ?? ""} onChange={(v) => set("api", v || undefined)} options={API_OPTIONS} />
@@ -639,6 +741,11 @@ function ModelDetail({
         <Check label={t("modelsConfig.imageInput")} checked={model.input?.includes("image") ?? false}
           onChange={(v) => set("input", v ? ["text", "image"] : undefined)} />
       </div>
+      {testState.phase === "error" && testState.reasoningDisabled && (
+        <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5, padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-panel)" }}>
+          {t("modelsConfig.reasoningNotSupportedHint")}
+        </div>
+      )}
 
       {model.reasoning && (
         <>
@@ -683,7 +790,12 @@ function ModelDetail({
         <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
           {(["input", "output", "cacheRead", "cacheWrite"] as const).map((k) => (
             <Field key={k} label={k}>
-              <NumInput value={costVal(k)} onChange={(v) => setCost(k, v)} placeholder="0" />
+              <DecimalInput
+                value={costVal(k)}
+                onChange={(v) => setCost(k, v)}
+                onBlur={() => handleCostBlur(k)}
+                placeholder="0"
+              />
             </Field>
           ))}
         </div>
@@ -1231,9 +1343,21 @@ function AddProviderPicker({
   );
 }
 
+interface ModelListOption {
+  id: string;
+  name: string;
+  provider: string;
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function ModelsConfig({ onClose }: { onClose: () => void }) {
+export function ModelsConfig({
+  onClose,
+  onModelsChanged,
+}: {
+  onClose: () => void;
+  onModelsChanged?: () => void;
+}) {
   const { t } = useI18n();
   const [config, setConfig] = useState<ModelsJson>({ providers: {} });
   const [loading, setLoading] = useState(true);
@@ -1244,6 +1368,11 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
   const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([]);
   const [apiKeyProviders, setApiKeyProviders] = useState<ApiKeyProvider[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [modelList, setModelList] = useState<ModelListOption[]>([]);
+  const [defaultModel, setDefaultModel] = useState<{ provider: string; modelId: string } | null>(null);
+  const [modelsMetaLoading, setModelsMetaLoading] = useState(true);
+  const [savingDefault, setSavingDefault] = useState(false);
+  const [defaultModelError, setDefaultModelError] = useState<string | null>(null);
 
   const loadOAuthProviders = useCallback(() => {
     fetch("/api/auth/providers")
@@ -1258,6 +1387,44 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
       .then((d: { providers: ApiKeyProvider[] }) => setApiKeyProviders(d.providers))
       .catch(() => {});
   }, []);
+
+  const loadModelsMeta = useCallback(() => {
+    setModelsMetaLoading(true);
+    fetch("/api/models")
+      .then((r) => r.json())
+      .then((d: { modelList?: ModelListOption[]; defaultModel?: { provider: string; modelId: string } | null }) => {
+        setModelList(d.modelList ?? []);
+        setDefaultModel(d.defaultModel ?? null);
+      })
+      .catch(() => {})
+      .finally(() => setModelsMetaLoading(false));
+  }, []);
+
+  const handleDefaultModelChange = useCallback(async (value: string) => {
+    const [provider, modelId] = value.split("::");
+    if (!provider || !modelId) return;
+    setSavingDefault(true);
+    setDefaultModelError(null);
+    try {
+      const res = await fetch("/api/settings/default-model", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, modelId }),
+      });
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setDefaultModel({ provider, modelId });
+      onModelsChanged?.();
+    } catch (err) {
+      setDefaultModelError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingDefault(false);
+    }
+  }, [onModelsChanged]);
+
+  useEffect(() => {
+    loadModelsMeta();
+  }, [loadModelsMeta]);
 
   useEffect(() => {
     fetch("/api/models-config")
@@ -1355,7 +1522,7 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
       const res = await fetch("/api/models-config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
+        body: JSON.stringify(normalizeModelsJson(config)),
       });
       const d = await res.json() as { success?: boolean; error?: string };
       if (!res.ok || d.error) setSaveError(d.error ?? `HTTP ${res.status}`);
@@ -1428,8 +1595,39 @@ export function ModelsConfig({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: "2px 6px" }}>×</button>
         </div>
 
+        {/* Default model */}
+        <div style={{ padding: "12px 18px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{t("modelsConfig.defaultModel")}</div>
+          <p style={{ margin: "4px 0 8px", fontSize: 11, lineHeight: 1.45, color: "var(--text-muted)" }}>{t("modelsConfig.defaultModelDescription")}</p>
+          <select
+            disabled={modelsMetaLoading || modelList.length === 0 || savingDefault}
+            value={defaultModel ? `${defaultModel.provider}::${defaultModel.modelId}` : ""}
+            onChange={(event) => void handleDefaultModelChange(event.target.value)}
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: 6,
+              border: "1px solid var(--border)",
+              background: "var(--bg-panel)",
+              color: "var(--text)",
+              fontSize: 12,
+            }}
+          >
+            <option value="">{t("modelsConfig.selectDefaultModel")}</option>
+            {modelList.map((model) => (
+              <option key={`${model.provider}:${model.id}`} value={`${model.provider}::${model.id}`}>
+                {model.name} ({model.provider})
+              </option>
+            ))}
+          </select>
+          <p style={{ margin: "6px 0 0", fontSize: 11, lineHeight: 1.45, color: "var(--text-dim)" }}>{t("modelsConfig.perSessionModelHint")}</p>
+          {defaultModelError && (
+            <p style={{ margin: "6px 0 0", fontSize: 11, color: "#f87171" }}>{defaultModelError}</p>
+          )}
+        </div>
+
         {/* Body */}
-        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
 
           {/* Left: tree */}
           <div style={{ width: 210, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", flexShrink: 0, background: "var(--bg-panel)" }}>

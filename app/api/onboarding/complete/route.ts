@@ -13,6 +13,7 @@ export async function POST(req: Request) {
       notificationsEnabled?: boolean;
       defaultWorkspaceCwd?: string;
       toolMode?: "simple" | "default" | "full";
+      lastOpenedSceneId?: string;
     };
 
     const preferences = mergePiWebPreferences({
@@ -24,6 +25,9 @@ export async function POST(req: Request) {
         ? { defaultWorkspaceCwd: body.defaultWorkspaceCwd.trim() }
         : {}),
       ...(body.toolMode ? { toolMode: body.toolMode } : {}),
+      ...(typeof body.lastOpenedSceneId === "string" && body.lastOpenedSceneId.trim()
+        ? { lastOpenedSceneId: body.lastOpenedSceneId.trim() }
+        : {}),
     });
 
     return NextResponse.json({ ok: true, preferences });

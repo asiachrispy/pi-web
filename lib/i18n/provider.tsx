@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   LOCALE_STORAGE_KEY,
+  normalizeLocale,
   resolveInitialLocale,
   translate,
   type AppLocale,
@@ -20,6 +21,8 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 function readClientLocale(): AppLocale {
   if (typeof window === "undefined") return "en";
+  const fromDocument = normalizeLocale(document.documentElement.lang);
+  if (fromDocument) return fromDocument;
   let storedLocale: string | null = null;
   try {
     storedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY);
@@ -30,7 +33,11 @@ function readClientLocale(): AppLocale {
 }
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<AppLocale>(() => readClientLocale());
+  const [locale, setLocaleState] = useState<AppLocale>("en");
+
+  useEffect(() => {
+    setLocaleState(readClientLocale());
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = locale;

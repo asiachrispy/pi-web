@@ -1,17 +1,6 @@
 import { PRESET_DEFAULT, PRESET_FULL, PRESET_NONE, type ToolPreset } from "@/components/ToolPanel";
 import type { ToolMode } from "@/lib/pi-web-preferences";
 
-export interface SimpleCapability {
-  id: string;
-  labelKey: string;
-}
-
-export const SIMPLE_CAPABILITIES: SimpleCapability[] = [
-  { id: "read", labelKey: "tools.capability.readFiles" },
-  { id: "write", labelKey: "tools.capability.editFiles" },
-  { id: "grep", labelKey: "tools.capability.searchFiles" },
-];
-
 export function toolModeToPreset(mode: ToolMode): ToolPreset {
   if (mode === "full") return "full";
   if (mode === "default") return "default";

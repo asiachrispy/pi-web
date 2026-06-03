@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n/provider";
 import type { Scene } from "@/lib/scenes";
+import { cachePiWebPreferences, readCachedPiWebPreferences } from "@/lib/pi-web-preferences-cache";
 
 interface OAuthProvider {
   id: string;
@@ -13,6 +14,9 @@ interface OAuthProvider {
 interface Props {
   onComplete: () => void;
   onLaunchScene: (scene: Scene, prompt: string, workspaceCwd: string) => void;
+  onOpenModels?: () => void;
+  /** Bump when models modal saves so step 2 can re-check hasModels. */
+  modelsRefreshKey?: number;
 }
 
 type Step = 1 | 2 | 3 | 4;
@@ -27,9 +31,10 @@ async function savePreferences(patch: Record<string, unknown>): Promise<void> {
     const data = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(data.error ?? `HTTP ${res.status}`);
   }
+  cachePiWebPreferences({ ...readCachedPiWebPreferences(), ...patch });
 }
 
-export function FirstRunWizard({ onComplete, onLaunchScene }: Props) {
+export function FirstRunWizard({ onComplete, onLaunchScene, onOpenModels, modelsRefreshKey = 0 }: Props) {
   const { t } = useI18n();
   const [step, setStep] = useState<Step>(1);
   const [workspaceCwd, setWorkspaceCwd] = useState<string | null>(null);
@@ -43,6 +48,7 @@ export function FirstRunWizard({ onComplete, onLaunchScene }: Props) {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [scenesLoading, setScenesLoading] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [hasModels, setHasModels] = useState(false);
 
   const [hasNativePicker, setHasNativePicker] = useState(false);
 
@@ -55,20 +61,35 @@ export function FirstRunWizard({ onComplete, onLaunchScene }: Props) {
     [providers],
   );
 
+  const refreshAccountStatus = useCallback(async () => {
+    const statusRes = await fetch("/api/onboarding/status");
+    const statusData = await statusRes.json() as { hasModels?: boolean };
+    setHasModels(Boolean(statusData.hasModels));
+  }, []);
+
   const loadProviders = useCallback(async () => {
     setProvidersLoading(true);
     try {
-      const res = await fetch("/api/auth/providers");
-      const data = await res.json() as { providers?: OAuthProvider[] };
+      const [providersRes] = await Promise.all([
+        fetch("/api/auth/providers"),
+        refreshAccountStatus(),
+      ]);
+      const data = await providersRes.json() as { providers?: OAuthProvider[] };
       setProviders(data.providers ?? []);
     } finally {
       setProvidersLoading(false);
     }
-  }, []);
+  }, [refreshAccountStatus]);
 
   useEffect(() => {
     void loadProviders();
   }, [loadProviders]);
+
+  useEffect(() => {
+    if (modelsRefreshKey > 0) {
+      void refreshAccountStatus();
+    }
+  }, [modelsRefreshKey, refreshAccountStatus]);
 
   useEffect(() => {
     if (step !== 4) return;
@@ -298,6 +319,15 @@ export function FirstRunWizard({ onComplete, onLaunchScene }: Props) {
               ))
             )}
             {oauthError && <div className="text-[12px] text-red-500">{oauthError}</div>}
+            {onOpenModels && (
+              <button
+                type="button"
+                onClick={() => onOpenModels()}
+                className="mt-2 w-full rounded-[8px] border border-border bg-bg-elevated px-4 py-2 text-[12px] font-medium text-text hover:bg-bg-hover"
+              >
+                {t("modelsConfig.manageAllConnections")}
+              </button>
+            )}
           </div>
         )}
 
@@ -367,7 +397,7 @@ export function FirstRunWizard({ onComplete, onLaunchScene }: Props) {
               disabled={
                 finishing
                 || (step === 1 && !workspaceCwd)
-                || (step === 2 && connectedCount === 0)
+                || (step === 2 && !hasModels && connectedCount === 0)
               }
               onClick={() => setStep((current) => (current < 4 ? (current + 1) as Step : current))}
               className="rounded-[6px] bg-accent px-4 py-2 text-[12px] font-semibold text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"

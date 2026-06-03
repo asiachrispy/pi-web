@@ -47,8 +47,7 @@ Pi（macOS App）
     ├── 工作台首页        默认路由（场景卡片）
     ├── 对话              ?session=<id>
     ├── 历史              workbenchView=history
-    ├── AI 服务           workbenchView=accounts（新）
-    ├── 设置              workbenchView=settings
+    ├── 设置              workbenchView=settings（含「模型」→ ModelsConfig 弹窗）
     └── 高级              侧栏会话树 + 完整 ToolPanel（显式进入）
 ```
 
@@ -58,7 +57,7 @@ Pi（macOS App）
 |------|----------|----------|
 | 入口 | 场景首页 | 侧栏「会话」或设置内链接 |
 | 工具 | 简洁模式（能力描述） | 标准 / 完整预设 |
-| 模型配置 | AI 服务页（OAuth + 默认模型） | 可保留 Models 弹窗给进阶 |
+| 模型配置 | 设置 →「模型」弹窗（OAuth/API Key 连接状态 + 默认模型 + models.json 表单） | 同左（无第二入口） |
 | 远程 / Bash / Skills 编辑 | 隐藏或折叠 | 设置底部「开发者」 |
 
 ---
@@ -104,7 +103,7 @@ sequenceDiagram
 | 步 | 标题（zh-CN） | 行为 |
 |----|---------------|------|
 | 1 | 选择工作区 | 「使用推荐文件夹」→ `POST /api/default-cwd`；「选择其他文件夹…」→ 壳 `pickDirectory` 或 Web 暂用路径输入（M1 优先壳） |
-| 2 | 连接 AI 服务 | 列出 2–4 个推荐 provider 卡片 + OAuth；至少一个成功才可下一步 |
+| 2 | 连接 AI 服务 | 列出 2–4 个推荐 provider 卡片 + OAuth；可打开 ModelsConfig；至少一个成功才可下一步 |
 | 3 | 完成通知 | 开关默认开；macOS 请求通知权限；说明可稍后在设置关闭 |
 | 4 | 开始第一次对话 | 展示 3 个推荐场景；点击即 `launchScene` + 预填首条 prompt |
 
@@ -113,18 +112,20 @@ sequenceDiagram
 - `POST /api/onboarding/complete` 写入 `pi-web-preferences.json`（见技术方案）。
 - 跳转 `/?view=home`，不再强制向导。
 
-### 3.3 AI 服务（M1-C）
+### 3.3 模型配置（M1-C）
 
-独立页，**不复用** Models 弹窗作为主路径。
+**单入口**：设置 →「模型」→ `ModelsConfig` 弹窗（与 CLI 共用 `models.json` / `auth.json`）。
 
 | 区块 | 内容 |
 |------|------|
-| 已连接 | provider 显示名、状态（已登录 / 需重新登录） |
-| 添加服务 | 与现有 `/api/auth/login/[provider]` 相同 |
-| 默认模型 | 下拉：仅已连接 provider 的模型 |
-| 发消息前拦截 | 无账户 → 全屏轻提示 + CTA「去连接 AI 服务」 |
+| 默认模型 | 顶部下拉 → `PUT /api/settings/default-model` |
+| 连接状态 | OAuth 订阅与 API Key provider 绿点状态（左栏 + 详情） |
+| 提供商与模型 | 现有 models.json 表单编辑 |
+| 发消息前拦截 | 无可用模型 → 顶部横幅 + CTA「配置模型」 |
 
-**白话**：不出现 provider API 术语；错误用「登录已过期，请重新连接」。
+**白话**：不出现裸 JSON；错误用「登录已过期，请重新连接」。
+
+**兼容**：旧链接 `?view=accounts` 重定向到设置并打开 ModelsConfig。
 
 ### 3.4 场景首页与工具（M1-D）
 
@@ -185,7 +186,7 @@ sequenceDiagram
                             │ HTTP + SSE
 ┌───────────────────────────▼─────────────────────────────┐
 │ pi-web (Next.js, 现有)                                   │
-│  AppShell / FirstRunWizard / AccountsSettings            │
+│  AppShell / FirstRunWizard / ModelsConfig               │
 │  lib/rpc-manager → AgentSession (in-process)             │
 └───────────────────────────┬─────────────────────────────┘
                             │
@@ -201,6 +202,8 @@ sequenceDiagram
 ---
 
 ## 7. macOS 壳契约（M1-A）
+
+实现清单见 **[macos-shell-contract.md](./macos-shell-contract.md)**（与下文一致，供壳仓库单独引用）。
 
 ### 7.1 启动参数（文档化，PL 与壳实现共用）
 
@@ -292,11 +295,11 @@ if (!onboarding.completed && !searchParams.has("session")) {
 
 `FirstRunWizard`：`components/onboarding/FirstRunWizard.tsx`（步骤机 + i18n）。
 
-### 9.2 `AccountsSettings`
+### 9.2 `ModelsConfig`
 
-- 路由：`workbenchView === "accounts"` 或 `?view=accounts`。
-- 数据：`/api/models`、`/api/auth/*` 现有流程。
-- 从 `WorkbenchSettings` 移除「打开模型配置」作为主 CTA，改为「AI 服务」。
+- 入口：设置 →「模型」；`?view=accounts` 重定向并打开弹窗。
+- 数据：`/api/models-config`、`/api/models`、`/api/auth/*`、`/api/settings/default-model`。
+- 顶部默认模型下拉；左栏 OAuth/API Key 连接状态；右侧提供商与模型表单。
 
 ### 9.3 RPC 接线（M1-E / F）
 
@@ -370,7 +373,7 @@ export async function notifyAgentEnd(sessionId: string, sessionName?: string) {
 
 | 周 | 交付 | 清单 |
 |----|------|------|
-| W1 | `health`、`preferences`、`onboarding` API；`FirstRunWizard` 骨架；`AccountsSettings` | M1-B/C 部分 |
+| W1 | `health`、`preferences`、`onboarding` API；`FirstRunWizard` 骨架；`ModelsConfig` 默认模型区 | M1-B/C 部分 |
 | W2 | RPC 接线 compaction/retry/stats/export；设置页开关；导出下载 | M1-E/F |
 | W3 | 场景默认首页、简洁工具；通知桥；i18n | M1-D/G/H |
 | W4 | macOS 壳探活/菜单/IPC；打包；用户说明 1 页；回归 | M1-A、交付物 |

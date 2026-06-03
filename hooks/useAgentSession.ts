@@ -6,6 +6,8 @@ import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { getPresetFromTools, PRESET_DEFAULT, PRESET_FULL, PRESET_NONE, type ToolEntry } from "@/components/ToolPanel";
 import type { Scene } from "@/lib/scenes";
+import type { ToolMode } from "@/lib/pi-web-preferences";
+import { toolModeToToolNames } from "@/lib/tool-presets";
 
 export interface SessionData {
   sessionId: string;
@@ -68,6 +70,7 @@ export interface UseAgentSessionOptions {
   setNewSessionModel?: (model: { provider: string; modelId: string } | null) => void;
   setToolPreset?: (preset: "none" | "default" | "full") => void;
   scene?: Scene | null;
+  toolMode?: ToolMode;
 }
 
 export type ThinkingLevelOption = "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -89,6 +92,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
     modelsRefreshKey, onBranchDataChange, onSystemPromptChange,
     scene,
+    toolMode = "simple",
   } = opts;
 
   const isNew = session === null && newSessionCwd !== null;
@@ -128,6 +132,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const pendingScrollToUserRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const previousSessionIdRef = useRef<string | null>(null);
+  const pendingCreateSessionIdRef = useRef<string | null>(null);
 
   const setNewSessionModel = opts.setNewSessionModel ?? setNewSessionModelState;
   const setToolPresetState = opts.setToolPreset ?? setToolPreset;
@@ -185,7 +191,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setError(String(e));
       return null;
     } finally {
-      if (showLoading) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
@@ -348,6 +354,26 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [loadSession, onAgentEnd]);
   handleAgentEventRef.current = handleAgentEvent;
 
+  const waitForAgentIdle = useCallback(async (sid: string) => {
+    for (let attempt = 0; attempt < 120; attempt++) {
+      try {
+        const res = await fetch(`/api/agent/${encodeURIComponent(sid)}`);
+        if (!res.ok) return;
+        const body = await res.json() as { state?: { isStreaming?: boolean } };
+        if (!body.state?.isStreaming) {
+          await loadSession(sid, false, true);
+          setAgentRunning(false);
+          setAgentPhase(null);
+          dispatch({ type: "end" });
+          return;
+        }
+      } catch {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }, [loadSession]);
+
   const handleSend = useCallback(async (message: string, images?: AttachedImage[]) => {
     if (!message.trim() && !images?.length) return;
     if (agentRunning) return;
@@ -372,7 +398,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       if (isNew && newSessionCwd) {
         const selectedModel = newSessionModel;
         if (selectedModel) setPendingModel(selectedModel);
-        const toolNames = toolPreset === "none" ? PRESET_NONE : toolPreset === "default" ? PRESET_DEFAULT : PRESET_FULL;
+        const toolNames = toolModeToToolNames(toolMode);
         const res = await fetch(scene ? `/api/scenes/${encodeURIComponent(scene.id)}/launch` : "/api/agent/new", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -390,7 +416,9 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         const result = await res.json() as { sessionId: string };
         const realId = result.sessionId;
         sessionIdRef.current = realId;
+        pendingCreateSessionIdRef.current = realId;
         connectEvents(realId);
+        void waitForAgentIdle(realId);
         onSessionCreated?.({
           id: realId,
           path: "",
@@ -412,6 +440,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           message,
           ...(piImages?.length ? { images: piImages } : {}),
         });
+        void waitForAgentIdle(session.id);
       }
     } catch (e) {
       console.error("Failed to send message:", e);
@@ -419,7 +448,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setAgentPhase(null);
       dispatch({ type: "end" });
     }
-  }, [isNew, newSessionCwd, newSessionModel, toolPreset, thinkingLevel, session, agentRunning, connectEvents, onSessionCreated, scene]);
+  }, [isNew, newSessionCwd, newSessionModel, toolMode, thinkingLevel, session, agentRunning, connectEvents, onSessionCreated, scene, waitForAgentIdle]);
 
   const handleAbort = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -479,8 +508,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     try {
       await sendAgentCommand(sid, { type: "set_model", provider, modelId });
       setCurrentModelOverride({ provider, modelId });
+      setError(null);
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
       console.error("Failed to set model:", e);
+      setError(message);
     }
   }, [isNew, setNewSessionModel]);
 
@@ -577,33 +609,55 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     container.scrollTo({ top: elAbsTop - 16, behavior: "smooth" });
   }, []);
 
-  // Load session on mount
+  // Load session when the active session id changes (including new → created transitions).
   useEffect(() => {
-    if (session) {
-      sessionIdRef.current = session.id;
-      loadSession(session.id, true, true).then((agentState) => {
-        if (agentState?.running) {
-          loadTools(session.id);
-          if (agentState.state?.isStreaming) {
-            setAgentRunning(true);
-            setAgentPhase({ kind: "waiting_model" });
-            connectEvents(session.id);
-          }
-        }
-        if (agentState?.state) {
-          if (agentState.state.isCompacting !== undefined) setIsCompacting(agentState.state.isCompacting);
-          if (agentState.state.contextUsage !== undefined) setContextUsage(agentState.state.contextUsage ?? null);
-          if (agentState.state.systemPrompt !== undefined) setSystemPrompt(agentState.state.systemPrompt ?? null);
-          if (agentState.state.thinkingLevel !== undefined) setThinkingLevel((agentState.state.thinkingLevel as ThinkingLevelOption) ?? "auto");
-        }
-      });
+    if (!session?.id) {
+      previousSessionIdRef.current = null;
+      sessionIdRef.current = null;
+      return () => {
+        eventSourceRef.current?.close();
+        eventSourceRef.current = null;
+      };
     }
+
+    const previousSessionId = previousSessionIdRef.current;
+    const isSessionSwitch = previousSessionId !== null && previousSessionId !== session.id;
+    const isInFlightCreate = pendingCreateSessionIdRef.current === session.id;
+    if (isInFlightCreate) pendingCreateSessionIdRef.current = null;
+    previousSessionIdRef.current = session.id;
+    sessionIdRef.current = session.id;
+    let cancelled = false;
+
+    if (isSessionSwitch) {
+      setMessages([]);
+      setEntryIds([]);
+    }
+
+    const showLoading = isSessionSwitch || (previousSessionId === null && !isInFlightCreate);
+    void loadSession(session.id, showLoading, true).then((agentState) => {
+      if (cancelled) return;
+      if (agentState?.running) {
+        void loadTools(session.id);
+        if (agentState.state?.isStreaming) {
+          setAgentRunning(true);
+          setAgentPhase({ kind: "waiting_model" });
+          connectEvents(session.id);
+        }
+      }
+      if (agentState?.state) {
+        if (agentState.state.isCompacting !== undefined) setIsCompacting(agentState.state.isCompacting);
+        if (agentState.state.contextUsage !== undefined) setContextUsage(agentState.state.contextUsage ?? null);
+        if (agentState.state.systemPrompt !== undefined) setSystemPrompt(agentState.state.systemPrompt ?? null);
+        if (agentState.state.thinkingLevel !== undefined) setThinkingLevel((agentState.state.thinkingLevel as ThinkingLevelOption) ?? "auto");
+      }
+    });
+
     return () => {
+      cancelled = true;
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [session?.id, loadSession, loadTools, connectEvents]);
 
   useEffect(() => {
     onSystemPromptChange?.(systemPrompt);

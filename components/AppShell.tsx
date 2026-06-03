@@ -12,7 +12,6 @@ import { BranchNavigator } from "./BranchNavigator";
 import { WorkbenchHistory } from "./WorkbenchHistory";
 import { WorkbenchHome } from "./WorkbenchHome";
 import { WorkbenchSettings } from "./WorkbenchSettings";
-import { AccountsSettings } from "./AccountsSettings";
 import { FirstRunWizard } from "./onboarding/FirstRunWizard";
 import { RemotePairingHandler } from "./RemotePairingHandler";
 import { RemoteAccessBanner } from "./RemoteAccessBanner";
@@ -24,6 +23,7 @@ import type { SessionInfo, SessionTreeNode } from "@/lib/types";
 import type { ChatInputHandle } from "./ChatInput";
 import { getSceneById, type ProductHistoryItem, type Scene } from "@/lib/scenes";
 import type { ToolMode } from "@/lib/pi-web-preferences";
+import { cachePiWebPreferences } from "@/lib/pi-web-preferences-cache";
 
 interface ScenesResponse {
   scenes?: Scene[];
@@ -54,7 +54,7 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
-  const [workbenchView, setWorkbenchView] = useState<"home" | "history" | "settings" | "accounts" | "chat">("home");
+  const [workbenchView, setWorkbenchView] = useState<"home" | "history" | "settings" | "chat">("home");
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [preferredCwd, setPreferredCwd] = useState<string | null>(null);
   const [toolMode, setToolMode] = useState<ToolMode>("simple");
@@ -100,6 +100,7 @@ export function AppShell() {
 
   // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
   const [sessionStats, setSessionStats] = useState<{ tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null>(null);
+  const lastSettingsSessionRef = useRef<{ id: string | null; stats: typeof sessionStats }>({ id: null, stats: null });
   const handleSessionStatsChange = useCallback((stats: { tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null) => {
     setSessionStats(stats);
   }, []);
@@ -173,6 +174,9 @@ export function AppShell() {
     void fetch("/api/preferences")
       .then((res) => res.json())
       .then((data: { preferences?: { defaultWorkspaceCwd?: string; toolMode?: ToolMode } }) => {
+        if (data.preferences) {
+          cachePiWebPreferences(data.preferences);
+        }
         if (data.preferences?.defaultWorkspaceCwd) {
           setPreferredCwd(data.preferences.defaultWorkspaceCwd);
           setActiveCwd(data.preferences.defaultWorkspaceCwd);
@@ -195,6 +199,18 @@ export function AppShell() {
     setActiveCwd(data.cwd);
     return data.cwd;
   }, [activeCwd, newSessionCwd, preferredCwd, selectedSession?.cwd]);
+
+  useEffect(() => {
+    if (selectedSession?.id) {
+      lastSettingsSessionRef.current.id = selectedSession.id;
+    }
+    if (sessionStats) {
+      lastSettingsSessionRef.current.stats = sessionStats;
+    }
+  }, [selectedSession?.id, sessionStats]);
+
+  const settingsSessionId = selectedSession?.id ?? lastSettingsSessionRef.current.id;
+  const settingsSessionStats = sessionStats ?? lastSettingsSessionRef.current.stats;
 
   const resetChatChrome = useCallback(() => {
     setBranchTree([]);
@@ -347,15 +363,9 @@ export function AppShell() {
     router.replace("/", { scroll: false });
   }, [resetChatChrome, router]);
 
-  const handleOpenAccountsView = useCallback(() => {
-    setSelectedSession(null);
-    setNewSessionCwd(null);
-    setActiveScene(null);
-    setWorkbenchView("accounts");
-    setSessionKey((k) => k + 1);
-    resetChatChrome();
-    router.replace("/?view=accounts", { scroll: false });
-  }, [resetChatChrome, router]);
+  const handleOpenModelsConfig = useCallback(() => {
+    setModelsConfigOpen(true);
+  }, []);
 
   const handleEnterAdvancedMode = useCallback(() => {
     setAdvancedMode(true);
@@ -479,9 +489,16 @@ export function AppShell() {
   useEffect(() => {
     const view = searchParams.get("view");
     if (view === "accounts") {
-      setWorkbenchView("accounts");
+      setSelectedSession(null);
+      setNewSessionCwd(null);
+      setActiveScene(null);
+      setWorkbenchView("settings");
+      setSessionKey((k) => k + 1);
+      resetChatChrome();
+      setModelsConfigOpen(true);
+      router.replace("/?view=settings", { scroll: false });
     }
-  }, [searchParams]);
+  }, [resetChatChrome, router, searchParams]);
 
   const sidebarContent = (
     <>
@@ -507,7 +524,7 @@ export function AppShell() {
 
   if (onboardingCompleted === null) {
     return (
-      <div className="flex h-dvh items-center justify-center text-[13px] text-text-muted">
+      <div className="flex h-dvh items-center justify-center text-[13px] text-text-muted" suppressHydrationWarning>
         {i18nT("common.loading")}
       </div>
     );
@@ -515,10 +532,20 @@ export function AppShell() {
 
   if (onboardingCompleted === false && !initialSessionId) {
     return (
-      <FirstRunWizard
-        onComplete={handleWizardComplete}
-        onLaunchScene={(scene, prompt, workspaceCwd) => { void handleWizardLaunchScene(scene, prompt, workspaceCwd); }}
-      />
+      <>
+        <FirstRunWizard
+          onComplete={handleWizardComplete}
+          onLaunchScene={(scene, prompt, workspaceCwd) => { void handleWizardLaunchScene(scene, prompt, workspaceCwd); }}
+          onOpenModels={handleOpenModelsConfig}
+          modelsRefreshKey={modelsRefreshKey}
+        />
+        {modelsConfigOpen && (
+          <ModelsConfig
+            onClose={() => { setModelsConfigOpen(false); setModelsRefreshKey((k) => k + 1); }}
+            onModelsChanged={() => setModelsRefreshKey((k) => k + 1)}
+          />
+        )}
+      </>
     );
   }
 
@@ -835,28 +862,21 @@ export function AppShell() {
               scene={activeChatScene}
               toolMode={toolMode}
               advancedMode={advancedMode}
-              onOpenAccounts={handleOpenAccountsView}
-              onOpenModels={() => setModelsConfigOpen(true)}
+              onOpenModels={handleOpenModelsConfig}
             />
           ) : showPlaceholder ? (
             workbenchView === "history" ? (
               <WorkbenchHistory onOpenHistory={handleOpenHistoryItem} />
             ) : workbenchView === "settings" ? (
               <WorkbenchSettings
-                onOpenAccounts={handleOpenAccountsView}
-                onOpenModels={() => setModelsConfigOpen(true)}
+                onOpenModels={handleOpenModelsConfig}
                 onOpenSkills={() => setSkillsConfigOpen(true)}
                 onOpenSceneId={handleOpenSceneById}
                 onEnterAdvancedMode={handleEnterAdvancedMode}
                 advancedMode={advancedMode}
-                selectedSessionId={null}
-                sessionStats={sessionStats}
+                selectedSessionId={settingsSessionId}
+                sessionStats={settingsSessionStats}
                 skillsDisabled={settingsSkillsDisabled}
-              />
-            ) : workbenchView === "accounts" ? (
-              <AccountsSettings
-                onModelsChanged={() => setModelsRefreshKey((k) => k + 1)}
-                onOpenModels={() => setModelsConfigOpen(true)}
               />
             ) : (
               <WorkbenchHome
@@ -924,7 +944,12 @@ export function AppShell() {
         <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="15" y1="3" x2="15" y2="21" />
       </svg>
     </button>
-    {modelsConfigOpen && <ModelsConfig onClose={() => { setModelsConfigOpen(false); setModelsRefreshKey((k) => k + 1); }} />}
+    {modelsConfigOpen && (
+      <ModelsConfig
+        onClose={() => { setModelsConfigOpen(false); setModelsRefreshKey((k) => k + 1); }}
+        onModelsChanged={() => setModelsRefreshKey((k) => k + 1)}
+      />
+    )}
     {skillsConfigOpen && (activeCwd ?? selectedSession?.cwd ?? newSessionCwd) && (
       <SkillsConfig cwd={(activeCwd ?? selectedSession?.cwd ?? newSessionCwd)!} onClose={() => setSkillsConfigOpen(false)} />
     )}

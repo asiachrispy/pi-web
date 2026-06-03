@@ -2,7 +2,6 @@
 
 import React, { useRef, useState, useCallback, useEffect, useImperativeHandle, forwardRef, KeyboardEvent } from "react";
 import { useI18n } from "@/lib/i18n/provider";
-import { SIMPLE_CAPABILITIES } from "@/lib/tool-presets";
 import type { ToolMode } from "@/lib/pi-web-preferences";
 
 export interface AttachedImage {
@@ -56,7 +55,7 @@ const TOOL_PRESET_MAP: Record<"off" | "default" | "full", "none" | "default" | "
 const THINKING_LEVELS = ["auto", "off", "minimal", "low", "medium", "high", "xhigh"] as const;
 export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   onSend, onAbort, onSteer, onFollowUp, isStreaming, model, modelNames, modelList, onModelChange,
-  onCompact, onAbortCompaction, isCompacting, compactError, toolPreset, onToolPresetChange, toolMode = "simple", showAdvancedTools = false,
+  onCompact, onAbortCompaction, isCompacting, compactError, toolPreset, onToolPresetChange, showAdvancedTools = false,
   thinkingLevel, onThinkingLevelChange, availableThinkingLevels, thinkingLevelMap,
   retryInfo,
   soundEnabled, onSoundToggle,
@@ -699,26 +698,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
                     })}
                   </div>
                 )}
-              </div>
-            )}
-            {!isStreaming && onToolPresetChange && !showAdvancedTools && toolMode === "simple" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 4px" }}>
-                {SIMPLE_CAPABILITIES.map((capability) => (
-                  <span
-                    key={capability.id}
-                    style={{
-                      padding: "4px 8px",
-                      borderRadius: 999,
-                      border: "1px solid var(--border)",
-                      background: "var(--bg-panel)",
-                      color: "var(--text-muted)",
-                      fontSize: 11,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {t(capability.labelKey)}
-                  </span>
-                ))}
               </div>
             )}
             {!isStreaming && onToolPresetChange && showAdvancedTools && (

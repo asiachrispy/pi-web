@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { getAgentDir } from "@/lib/agent-dir";
 import { defaultAutoCompactionEnabled, defaultAutoRetryEnabled } from "@/lib/pi-web-preferences";
 import { cacheSessionPath } from "./session-reader";
+import { lookupModel } from "./resolve-model";
 import type { AgentSessionLike, ToolInfo } from "./pi-types";
 
 // ============================================================================
@@ -48,7 +49,7 @@ export class AgentSessionWrapper {
       this.resetIdleTimer();
       for (const l of this.listeners) l(event);
       if (event.type === "agent_end") {
-        void import("./notify-agent-end").then(({ notifyAgentEnd }) =>
+        void import("./notify-agent-end-server").then(({ notifyAgentEnd }) =>
           notifyAgentEnd({ sessionId: this.sessionId }).catch(() => {}),
         );
       }
@@ -112,8 +113,7 @@ export class AgentSessionWrapper {
 
       case "set_model": {
         const { provider, modelId } = command as { provider: string; modelId: string };
-        const registry = this.inner.modelRegistry;
-        const model = registry.find(provider, modelId);
+        const model = lookupModel(this.inner.modelRegistry, provider, modelId);
         if (!model) throw new Error(`Model not found: ${provider}/${modelId}`);
         await this.inner.setModel(model);
         return { id: model.id, provider: model.provider };
@@ -283,6 +283,13 @@ function getLocks(): Map<string, Promise<{ session: AgentSessionWrapper; realSes
 
 export function getRpcSession(sessionId: string): AgentSessionWrapper | undefined {
   return getRegistry().get(sessionId);
+}
+
+/** Drop in-memory agent sessions so the next request reloads models.json from disk. */
+export function destroyAllRpcSessions(): void {
+  getRegistry().forEach((session) => session.destroy());
+  getRegistry().clear();
+  getLocks().clear();
 }
 
 /**

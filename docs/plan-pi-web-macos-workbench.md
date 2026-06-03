@@ -161,7 +161,7 @@
 |--------|------|----------|
 | M1-A 壳 | PL-01/02/03/06；启动契约 | macOS 壳、`bin/pi-web.js` |
 | M1-B 向导 | 首次运行 UI；选工作区 cwd + preferences；检测 agent/models | 新 `FirstRunWizard`、`pi-web-preferences.json` |
-| M1-C 账户 | 独立「AI 服务」页；OAuth → `auth.json`（PL-05） | `AccountsSettings`（从 `ModelsConfig` 拆出） |
+| M1-C 模型 | 设置 → ModelsConfig；OAuth/API Key + 默认模型 + models.json 表单 | `ModelsConfig.tsx` |
 | M1-D 首页 | PR-01 场景默认；PR-02 简洁工具模式 | `WorkbenchHome`、`AppShell` |
 | M1-E 稳定性 | PI-01/02 | `useAgentSession`、`rpc-manager`、`WorkbenchSettings` |
 | M1-F 结果 | PI-03 导出；PI-04 简版统计 | `rpc-manager`、`ChatWindow` / 设置 |
@@ -242,7 +242,7 @@
 1. rpc-manager 补命令：export_html, get_session_stats, clone,
    set_steering_mode, set_follow_up_mode, set_session_name
 2. useAgentSession：SSE queue_update、stats
-3. WorkbenchSettings / FirstRunWizard / AccountsSettings
+3. WorkbenchSettings / FirstRunWizard / ModelsConfig
 4. AppShell：scene-first 默认路由与工具模式
 5. BranchNavigator / MessageView：分支与 Clone 文案
 6. i18n + 测试

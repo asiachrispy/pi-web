@@ -10,7 +10,6 @@ import { SceneConfigEditor } from "./SceneConfigEditor";
 import { RemoteAccessSettings } from "./RemoteAccessSettings";
 
 interface Props {
-  onOpenAccounts: () => void;
   onOpenModels: () => void;
   onOpenSkills: () => void;
   onOpenSceneId: (sceneId: string) => void;
@@ -76,7 +75,6 @@ function translateSettingsError(message: string | null, t: ReturnType<typeof use
 }
 
 export function WorkbenchSettings({
-  onOpenAccounts,
   onOpenModels,
   onOpenSkills,
   onOpenSceneId,
@@ -234,13 +232,6 @@ export function WorkbenchSettings({
               ))}
             </div>
           </div>
-          <button
-            onClick={onOpenAccounts}
-            className="rounded-[8px] border border-border bg-bg-panel p-4 text-left hover:bg-bg-hover"
-          >
-            <div className="text-[14px] font-semibold text-text">{t("settings.openAccounts")}</div>
-            <div className="mt-2 text-[12px] leading-5 text-text-muted">{t("settings.openAccountsDescription")}</div>
-          </button>
           <button
             onClick={onOpenModels}
             className="rounded-[8px] border border-border bg-bg-panel p-4 text-left hover:bg-bg-hover"
