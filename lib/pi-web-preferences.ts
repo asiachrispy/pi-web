@@ -5,11 +5,9 @@ import { getAgentDir } from "@/lib/agent-dir";
 export type ToolMode = "simple" | "default" | "full";
 
 export interface PiWebPreferences {
-  onboardingCompletedAt?: string;
   defaultWorkspaceCwd?: string;
   toolMode?: ToolMode;
   notificationsEnabled?: boolean;
-  lastOpenedSceneId?: string;
   autoCompactionEnabled?: boolean;
   autoRetryEnabled?: boolean;
 }

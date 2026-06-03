@@ -10,6 +10,7 @@ try {
 } catch { /* package not found, use default */ }
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   serverExternalPackages: ["@earendil-works/pi-coding-agent", "@earendil-works/pi-ai"],
   devIndicators: process.env.NODE_ENV === "development" ? {
     position: "bottom-right",

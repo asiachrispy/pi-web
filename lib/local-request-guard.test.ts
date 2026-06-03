@@ -3,12 +3,12 @@ import { isSafeMutatingRequest } from "./local-request-guard";
 
 describe("local mutating request guard", () => {
   it("allows same-origin localhost mutations", () => {
-    expect(isSafeMutatingRequest({ host: "localhost:30141", origin: "http://localhost:30141" })).toBe(true);
+    expect(isSafeMutatingRequest({ host: "localhost:30142", origin: "http://localhost:30142" })).toBe(true);
     expect(isSafeMutatingRequest({ host: "127.0.0.1:30141", origin: "http://127.0.0.1:30141" })).toBe(true);
   });
 
   it("rejects cross-origin browser mutations", () => {
-    expect(isSafeMutatingRequest({ host: "localhost:30141", origin: "https://example.com" })).toBe(false);
+    expect(isSafeMutatingRequest({ host: "localhost:30142", origin: "https://example.com" })).toBe(false);
   });
 
   it("rejects LAN host mutations unless remote auth is configured", () => {

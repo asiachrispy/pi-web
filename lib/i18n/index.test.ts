@@ -58,6 +58,7 @@ describe("i18n translation lookup", () => {
   });
 
   it("falls back to English when the current locale key is missing", () => {
+    vi.stubEnv("NODE_ENV", "test");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const original = zhCN.modelsConfig.callbackPlaceholder;
     const mutableModelsConfig = zhCN.modelsConfig as Record<string, string>;
@@ -68,17 +69,21 @@ describe("i18n translation lookup", () => {
     expect(warn).toHaveBeenCalledTimes(1);
 
     mutableModelsConfig.callbackPlaceholder = original;
+    vi.unstubAllEnvs();
   });
 
   it("returns the key when both locales are missing", () => {
+    vi.stubEnv("NODE_ENV", "test");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const unknownKey = "workbenchSettings.notARealKey" as TranslationKey;
 
     expect(translate("en", unknownKey)).toBe(unknownKey);
     expect(warn).toHaveBeenCalledTimes(1);
+    vi.unstubAllEnvs();
   });
 
   it("warns only once per missing key and locale pair", () => {
+    vi.stubEnv("NODE_ENV", "test");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const unknownKey = "workbenchSettings.notARealKey" as TranslationKey;
 
@@ -87,5 +92,6 @@ describe("i18n translation lookup", () => {
     translate("en", unknownKey);
 
     expect(warn).toHaveBeenCalledTimes(2);
+    vi.unstubAllEnvs();
   });
 });

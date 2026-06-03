@@ -46,7 +46,7 @@ PORT=8080 pi-web                 # 也支持环境变量
 
 ## 注意事项
 
-- **数据目录** — 默认读取 `~/.pi/agent/sessions` 下的会话文件。可通过环境变量 `PI_CODING_AGENT_DIR` 指定其他目录。
+- **数据目录** — 默认读取 `~/.pi/agent/sessions` 下的会话文件。可通过环境变量 `PI_CODING_AGENT_DIR` 指定其他目录（本地开发时见下方「端口与数据隔离」，勿写入 `.env.local`）。
 - **模型配置** — 从智能体数据目录下的 `models.json` 读取可用模型，可在侧边栏的「Models」面板中编辑。
 - **文件浏览** — 侧边栏内置文件浏览器，可在标签页中查看当前工作目录下的文件。
 
@@ -66,10 +66,51 @@ PORT=8080 pi-web                 # 也支持环境变量
 
 ```bash
 npm install
-npm run dev   # 端口 30141
 npm run lint
 npm run test:run
 ```
+
+### 端口与数据隔离
+
+**原则：30141 是你日常使用的服务；开发、改代码、跑测试只动 30142，不要影响 30141。**
+
+| 用途 | 端口 | 命令 | 数据目录 | 说明 |
+|------|------|------|----------|------|
+| **日常使用** | **30141** | `npm start` 或全局 `pi-web` | `~/.pi/agent/` | 稳定服务，不随源码热更新 |
+| **开发 / 测试** | **30142** | `npm run dev` | `~/tmp/pi-dev-agent/` | 改代码、试功能只用此端口 |
+
+```bash
+# 30141 — 日常服务（先 build 一次，之后可长期开着）
+npm run build && npm start
+
+# 30142 — 开发测试（与 30141 可同时运行）
+npm run dev
+```
+
+### 让改动在 30141 上生效
+
+30141 使用 `next start`，读取仓库根目录的 `.next` 生产构建，**不会**像 30142 那样随保存自动热更新。在 30142 上验证通过的 UI/逻辑修复，要同步到日常端口必须：
+
+```bash
+npm run build
+# 若 30141 已在运行，先结束占用该端口的进程，再：
+npm start
+```
+
+浏览器打开 [http://127.0.0.1:30141](http://127.0.0.1:30141) 后建议 **硬刷新**（Cmd+Shift+R），避免旧前端资源缓存。
+
+- **本仓库**：`npm start` 或 macOS [PiWorkbench](macos/README.md)（内嵌子进程连 `127.0.0.1:30141`）——在本目录 `build` 并重启即可。
+- **全局 `pi-web`**：需在该包的安装目录执行 `npm run build` 后再启动 CLI，否则仍是旧构建。
+
+`npm run dev` 会设置 `PI_CODING_AGENT_DIR=~/tmp/pi-dev-agent`，并使用独立构建目录 `.next-dev-30142`，避免与 30141 抢锁、混数据。
+
+**不要在 30141 上跑 `next dev`**（包括 `npm run dev:prod`）：它与 30142 共用同一份源码，保存文件时两边都会热更新，开发中的半成品会直接打断你在 30141 上的使用。30141 请用 `npm start`（或已安装的 `pi-web`）。
+
+**不要在 `.env.local` 里设置 `PI_CODING_AGENT_DIR`**：Next.js 会在所有模式下加载该文件，导致 30141 误读空的 dev 目录、会话「丢失」。数据目录隔离只写在 `npm run dev` 脚本里。
+
+偶尔需要在真实数据上调试 HMR 时，可临时使用 `npm run dev:prod`（30141 + `~/.pi/agent/`），**不要与 `npm run dev` 同时开**。
+
+更多细节见 [AGENTS.md](AGENTS.md#dev--production-isolation)。
 
 ## 项目结构
 

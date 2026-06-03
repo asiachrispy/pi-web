@@ -5,7 +5,6 @@ import type { AgentMessage, SessionInfo, SessionTreeNode } from "@/lib/types";
 import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
 import { getPresetFromTools, PRESET_DEFAULT, PRESET_FULL, PRESET_NONE, type ToolEntry } from "@/components/ToolPanel";
-import type { Scene } from "@/lib/scenes";
 import type { ToolMode } from "@/lib/pi-web-preferences";
 import { toolModeToToolNames } from "@/lib/tool-presets";
 
@@ -69,7 +68,6 @@ export interface UseAgentSessionOptions {
   onSystemPromptChange?: (prompt: string | null) => void;
   setNewSessionModel?: (model: { provider: string; modelId: string } | null) => void;
   setToolPreset?: (preset: "none" | "default" | "full") => void;
-  scene?: Scene | null;
   toolMode?: ToolMode;
 }
 
@@ -91,7 +89,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const {
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
     modelsRefreshKey, onBranchDataChange, onSystemPromptChange,
-    scene,
     toolMode = "simple",
   } = opts;
 
@@ -399,12 +396,12 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         const selectedModel = newSessionModel;
         if (selectedModel) setPendingModel(selectedModel);
         const toolNames = toolModeToToolNames(toolMode);
-        const res = await fetch(scene ? `/api/scenes/${encodeURIComponent(scene.id)}/launch` : "/api/agent/new", {
+        const res = await fetch("/api/agent/new", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             cwd: newSessionCwd,
-            ...(scene ? {} : { type: "prompt" }),
+            type: "prompt",
             message,
             toolNames,
             ...(piImages?.length ? { images: piImages } : {}),
@@ -428,10 +425,6 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           modified: new Date().toISOString(),
           messageCount: 1,
           firstMessage: message,
-          sceneId: scene?.id,
-          sceneName: scene?.name,
-          productTitle: scene ? message : undefined,
-          productStatus: scene ? "active" : undefined,
         });
       } else if (session) {
         connectEvents(session.id);
@@ -448,7 +441,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       setAgentPhase(null);
       dispatch({ type: "end" });
     }
-  }, [isNew, newSessionCwd, newSessionModel, toolMode, thinkingLevel, session, agentRunning, connectEvents, onSessionCreated, scene, waitForAgentIdle]);
+  }, [isNew, newSessionCwd, newSessionModel, toolMode, thinkingLevel, session, agentRunning, connectEvents, onSessionCreated, waitForAgentIdle]);
 
   const handleAbort = useCallback(async () => {
     const sid = sessionIdRef.current;

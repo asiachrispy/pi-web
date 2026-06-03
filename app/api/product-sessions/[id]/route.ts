@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readProductSessionMetadata, upsertProductSessionMetadata } from "@/lib/scene-metadata";
 import { sanitizePromptInput } from "@/lib/prompt-guard";
 import { rejectUnsafeMutation } from "@/lib/local-request-guard";
-import type { ProductSessionMetadata, ProductSessionStatus } from "@/lib/scenes";
+import type { ProductSessionMetadata, ProductSessionStatus } from "@/lib/scene-metadata";
 
 const SUMMARY_MAX_CHARS = 240;
 const ALLOWED_STATUS: ReadonlySet<ProductSessionStatus> = new Set(["active", "completed", "draft"]);

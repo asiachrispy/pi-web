@@ -1,6 +1,6 @@
 # Workbench Smoke Test — CI Integration
 
-The workbench smoke script `scripts/workbench-smoke.mjs` is the cheapest end-to-end check we have. It boots a headless Chromium against a running pi-web server, asserts that the home page lists the four launch scenes, that a scene launch inserts a starter prompt, and that `/api/usage` + `/api/automation` + `/api/automation/run` return the expected shapes.
+The workbench smoke script `scripts/workbench-smoke.mjs` is the cheapest end-to-end check we have. It boots a headless Chromium against a running pi-web server, asserts the Workbench home (new conversation + recent work), the Settings stability section, and that `GET /api/usage` returns the current summary shape.
 
 This document is **not** a CI config. It tells the next person wiring CI exactly what the script needs so they don't have to spelunk through the code.
 

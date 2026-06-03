@@ -25,8 +25,8 @@
 **核心场景（Happy Path）**
 
 1. 双击 App → 等待本地服务就绪（≤30s 内可接受）。
-2. 首次向导：选工作区 → 连至少一个 AI 服务 → 可选开通知 → 点场景卡片发首条消息。
-3. 日常使用：打开即见场景首页；长对话自动整理、失败自动重试；任务结束收到通知；需要时导出 HTML。
+2. 首次使用：打开 Workbench 首页 → 在设置中选工作区、连接 AI 服务 → 从「新建对话」发首条消息。
+3. 日常使用：打开即见 Workbench 首页（新建对话 + 最近记录）；长对话自动整理、失败自动重试；任务结束收到通知；需要时导出 HTML。
 
 **成功标准（与清单里程碑验收一致）**
 
@@ -43,8 +43,7 @@
 Pi（macOS App）
 ├── 启动层（壳）          探活 / 重启服务 / 系统通知
 └── pi-web（内嵌 WebView）
-    ├── 首次向导          /?onboarding=1（门控，完成后隐藏）
-    ├── 工作台首页        默认路由（场景卡片）
+    ├── 工作台首页        默认路由（新建对话 + 最近记录）
     ├── 对话              ?session=<id>
     ├── 历史              workbenchView=history
     ├── 设置              workbenchView=settings（含「模型」→ ModelsConfig 弹窗）
@@ -55,7 +54,7 @@ Pi（macOS App）
 
 | 能力 | 默认用户 | 高级入口 |
 |------|----------|----------|
-| 入口 | 场景首页 | 侧栏「会话」或设置内链接 |
+| 入口 | Workbench 首页 | 侧栏「会话」或设置内链接 |
 | 工具 | 简洁模式（能力描述） | 标准 / 完整预设 |
 | 模型配置 | 设置 →「模型」弹窗（OAuth/API Key 连接状态 + 默认模型 + models.json 表单） | 同左（无第二入口） |
 | 远程 / Bash / Skills 编辑 | 隐藏或折叠 | 设置底部「开发者」 |
@@ -91,26 +90,18 @@ sequenceDiagram
 - 失败：「无法连接到 Pi 服务」+「重试」「重启服务」
 - 菜单：退出 · 重启服务 · 打开数据文件夹（附一句：`对话与设置保存在本机，路径见说明`）
 
-### 3.2 首次运行向导（M1-B）
+### 3.2 首次使用（M1-B）
 
-**触发条件**（满足任一且未完成 onboarding 则显示）：
+无独立向导或 AppShell 门控。用户默认进入 **WorkbenchHome**（新建对话 + 最近记录），在设置中完成工作区与模型配置后从首页发起对话。
 
-1. `GET /api/onboarding/status` 返回 `completed: false`，且  
-2. 以下至少一项为真：无可用模型（`modelList.length === 0`）、无默认 provider、或 `~/.pi/agent` 首次创建。
+| 步骤 | 行为 |
+|------|------|
+| 工作区 | 设置 → 工作区；「选择文件夹…」→ 壳 `pickDirectory` 或路径输入；写入 `PUT /api/preferences` 的 `defaultWorkspaceCwd` |
+| AI 服务 | 设置 →「模型」→ `ModelsConfig`（OAuth / API Key）；无可用模型时顶部横幅 + CTA |
+| 通知 | 设置中开关；macOS 请求通知权限（非向导步骤） |
+| 首条对话 | 首页「新建对话」→ `?session=<id>` |
 
-**步骤（4 屏，可上一步）**
-
-| 步 | 标题（zh-CN） | 行为 |
-|----|---------------|------|
-| 1 | 选择工作区 | 「使用推荐文件夹」→ `POST /api/default-cwd`；「选择其他文件夹…」→ 壳 `pickDirectory` 或 Web 暂用路径输入（M1 优先壳） |
-| 2 | 连接 AI 服务 | 列出 2–4 个推荐 provider 卡片 + OAuth；可打开 ModelsConfig；至少一个成功才可下一步 |
-| 3 | 完成通知 | 开关默认开；macOS 请求通知权限；说明可稍后在设置关闭 |
-| 4 | 开始第一次对话 | 展示 3 个推荐场景；点击即 `launchScene` + 预填首条 prompt |
-
-**完成**
-
-- `POST /api/onboarding/complete` 写入 `pi-web-preferences.json`（见技术方案）。
-- 跳转 `/?view=home`，不再强制向导。
+偏好仅经 `GET/PUT /api/preferences` 读写 `pi-web-preferences.json`。
 
 ### 3.3 模型配置（M1-C）
 
@@ -127,7 +118,7 @@ sequenceDiagram
 
 **兼容**：旧链接 `?view=accounts` 重定向到设置并打开 ModelsConfig。
 
-### 3.4 场景首页与工具（M1-D）
+### 3.4 工作台首页与工具（M1-D）
 
 - **PR-01**：`AppShell` 初始 `workbenchView === "home"`；无 `?session=` 时不自动展开侧栏会话树。
 - **PR-02**：`ChatInput` 工具区新增「简洁模式」：
@@ -156,7 +147,7 @@ sequenceDiagram
 
 ## 4. 文案与 i18n（M1-H）
 
-- 命名空间：`onboarding.*`、`accounts.*`、`settings.autoCompaction` 等。
+- 命名空间：`settings.*`、`accounts.*`、`workbench.*` 等。
 - 语言：`zh-CN`、`en` 同步交付；禁止硬编码新增 UI 字符串。
 - 术语表：遵循 [总计划 §1.2](./plan-pi-web-macos-workbench.md#12-术语对照ui-文案)。
 
@@ -186,7 +177,7 @@ sequenceDiagram
                             │ HTTP + SSE
 ┌───────────────────────────▼─────────────────────────────┐
 │ pi-web (Next.js, 现有)                                   │
-│  AppShell / FirstRunWizard / ModelsConfig               │
+│  AppShell / WorkbenchHome / ModelsConfig                  │
 │  lib/rpc-manager → AgentSession (in-process)             │
 └───────────────────────────┬─────────────────────────────┘
                             │
@@ -228,7 +219,7 @@ node /Applications/Pi.app/Contents/Resources/pi-web/bin/pi-web.js
 
 | 方法 | 用途 |
 |------|------|
-| `pi.pickWorkspaceDirectory()` | 向导步骤 1 |
+| `pi.pickWorkspaceDirectory()` | 设置页选工作区 |
 | `pi.showNotification({ title, body, sessionId })` | M1-G |
 | `pi.openPath(path)` | 打开数据文件夹、导出 HTML 后在 Finder 显示 |
 | `pi.restartServer()` | PL-02 |
@@ -249,32 +240,23 @@ node /Applications/Pi.app/Contents/Resources/pi-web/bin/pi-web.js
 
 ```ts
 interface PiWebPreferences {
-  onboardingCompletedAt?: string; // ISO
   defaultWorkspaceCwd?: string;
   toolMode?: "simple" | "default" | "full";
   notificationsEnabled?: boolean;
-  lastOpenedSceneId?: string;
+  autoCompactionEnabled?: boolean;
+  autoRetryEnabled?: boolean;
 }
 ```
 
 读写：`lib/pi-web-preferences.ts` + `GET/PUT /api/preferences`（`rejectUnsafeMutation` + 本地鉴权）。
 
-### 8.2 Onboarding API
-
-| 路由 | 方法 | 响应 |
-|------|------|------|
-| `/api/onboarding/status` | GET | `{ completed, needsWorkspace, needsAccount, hasModels }` |
-| `/api/onboarding/complete` | POST | 写 preferences + `{ ok: true }` |
-
-`needsAccount`：`modelList` 为空或 `AuthStorage` 无有效登录（复用 `/api/models` 逻辑）。
-
-### 8.3 工作区
+### 8.2 工作区
 
 - `POST /api/default-cwd` 降为可选快捷（见 [product-principles.md](./product-principles.md) §3）；主路径为用户自选文件夹。
 - 新增 `PUT /api/preferences` 字段 `defaultWorkspaceCwd`；`SessionSidebar` / 新会话默认用该 cwd。
 - 壳选目录：写入 preferences + 可选 `settings.json` 的 cwd 键（若 pi 支持全局默认 cwd 再对齐，M1 以 preferences 为准）。
 
-### 8.4 健康检查
+### 8.3 健康检查
 
 `app/api/health/route.ts` — 轻量，不创建 `AgentSession`。
 
@@ -282,18 +264,9 @@ interface PiWebPreferences {
 
 ## 9. 前端模块设计
 
-### 9.1 门控：`AppShell`
+### 9.1 `AppShell`
 
-```tsx
-// 伪代码
-const onboarding = useOnboardingStatus();
-if (!onboarding.completed && !searchParams.has("session")) {
-  return <FirstRunWizard onComplete={...} />;
-}
-// 现有 AppShell
-```
-
-`FirstRunWizard`：`components/onboarding/FirstRunWizard.tsx`（步骤机 + i18n）。
+默认 `workbenchView === "home"`（WorkbenchHome）；无 `?session=` 时不自动展开侧栏会话树。无 onboarding 门控。
 
 ### 9.2 `ModelsConfig`
 
@@ -362,10 +335,10 @@ export async function notifyAgentEnd(sessionId: string, sessionName?: string) {
 | 项 | M1 策略 |
 |----|---------|
 | 绑定地址 | `127.0.0.1` only |
-| API 鉴权 | 保持 `requireApiAuth`；health/onboarding/status 仅 loopback 豁免 |
+| API 鉴权 | 保持 `requireApiAuth`；`/api/health` 仅 loopback 豁免 |
 | 凭据 | 仅用 `~/.pi/agent/auth.json`（与 CLI 相同）；Web 不 `localStorage` 存密钥 |
 | 工作区 | macOS sandbox + 用户选目录；API `files/[...path]` 继续校验路径在工作区内 |
-| 远程 | 默认 `remote.enabled === false`；向导不提及 |
+| 远程 | 默认 `remote.enabled === false`；默认用户路径不提及 |
 
 ---
 
@@ -373,9 +346,9 @@ export async function notifyAgentEnd(sessionId: string, sessionName?: string) {
 
 | 周 | 交付 | 清单 |
 |----|------|------|
-| W1 | `health`、`preferences`、`onboarding` API；`FirstRunWizard` 骨架；`ModelsConfig` 默认模型区 | M1-B/C 部分 |
+| W1 | `health`、`preferences` API；`ModelsConfig` 默认模型区；WorkbenchHome | M1-B/C 部分 |
 | W2 | RPC 接线 compaction/retry/stats/export；设置页开关；导出下载 | M1-E/F |
-| W3 | 场景默认首页、简洁工具；通知桥；i18n | M1-D/G/H |
+| W3 | 工作台默认首页、简洁工具；通知桥；i18n | M1-D/G/H |
 | W4 | macOS 壳探活/菜单/IPC；打包；用户说明 1 页；回归 | M1-A、交付物 |
 
 **依赖**：pi-web 可与壳并行；壳 W4 集成时用 `standalone` Next 输出 + 内嵌 `node`（或 `bun`）运行时。
@@ -387,10 +360,10 @@ export async function notifyAgentEnd(sessionId: string, sessionName?: string) {
 | 类型 | 范围 |
 |------|------|
 | 单元 | `pi-web-preferences` 读写；`toolMode` 映射 |
-| API | `onboarding/status`、`health`；`export_html` 返回 path |
-| 组件 | 向导步骤机（mock fetch） |
+| API | `health`；`export_html` 返回 path |
+| 组件 | WorkbenchHome、ModelsConfig（mock fetch） |
 | 回归 | 侧栏 `pinnedSession` / `filterCwd`（M1-H） |
-| 手工 | 无模型 → 向导；OAuth → 发消息；导出 HTML Finder 打开；通知深链 |
+| 手工 | 无模型 → 横幅 + 配置模型；OAuth → 发消息；导出 HTML Finder 打开；通知深链 |
 
 不跑 `next build` 于 CI 日常；发版前单独 `standalone` 构建验证。
 
@@ -401,7 +374,7 @@ export async function notifyAgentEnd(sessionId: string, sessionName?: string) {
 | 清单块 | 本文章节 |
 |--------|----------|
 | M1-A | §3.1、§7 |
-| M1-B | §3.2、§8.2、§9.1 |
+| M1-B | §3.2、§8.1、§9.1 |
 | M1-C | §3.3、[product-principles.md](./product-principles.md) §2 |
 | M1-D | §3.4、§9.4 |
 | M1-E | §3.5、§9.3 |
@@ -419,7 +392,7 @@ export async function notifyAgentEnd(sessionId: string, sessionName?: string) {
 |----|------|
 | 壳 | `bin/pi-web.js` + 薄 macOS `.app`（WKWebView）；内嵌 Node |
 | 凭据 / 工作区 | 与 CLI 共用 `~/.pi/agent`（`auth.json`、`sessions/`）；工作区 = 用户选的 `cwd` |
-| OAuth | 向导 + AI 服务页；写入 `auth.json`（不做 Keychain） |
+| OAuth | 设置 → 模型；写入 `auth.json`（不做 Keychain） |
 
 ---
 

@@ -26,8 +26,8 @@ describe("remote auth", () => {
 
   it("allows loopback requests when remote is disabled", async () => {
     const { authorizeRequest } = await import("./remote-auth");
-    const req = new Request("http://127.0.0.1:30141/api/sessions", {
-      headers: { host: "127.0.0.1:30141" },
+    const req = new Request("http://127.0.0.1:30142/api/sessions", {
+      headers: { host: "127.0.0.1:30142" },
     });
     expect(authorizeRequest(req).authorized).toBe(true);
   });
@@ -48,9 +48,9 @@ describe("remote auth", () => {
     const config = loadRemoteAuthConfig();
     expect(config?.enabled).toBe(true);
 
-    const req = new Request("http://127.0.0.1:30141/api/remote", {
+    const req = new Request("http://127.0.0.1:30142/api/remote", {
       method: "POST",
-      headers: { host: "127.0.0.1:30141", "user-agent": "vitest" },
+      headers: { host: "127.0.0.1:30142", "user-agent": "vitest" },
     });
     const { createPairingOffer } = await import("./remote-auth");
     const offer = createPairingOffer(req);

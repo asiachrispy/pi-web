@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { listAllSessions } from "@/lib/session-reader";
 import { readProductSessionMetadataMap } from "@/lib/scene-metadata";
-import { buildHistoryItems } from "@/lib/scenes";
+import { buildHistoryItems } from "@/lib/product-history";
 import { buildUsageSummary } from "@/lib/usage";
 import { requireApiAuth } from "@/lib/api-auth";
 

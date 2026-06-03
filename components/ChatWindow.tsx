@@ -10,10 +10,7 @@ import { getNativeBridge, notifyAgentEnd } from "@/lib/notify-agent-end";
 import { useAudio } from "@/hooks/useAudio";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { invalidateControlResource } from "@/hooks/useControlCollection";
-import { buildMarkdownExport, getActionsForScene, summarizeOutputStyle, type Scene, type SceneAction } from "@/lib/scenes";
-import { actionPromptAsText, buildActionPrompt } from "@/lib/scene-action-policy";
 import { summarizeForHistory } from "@/lib/history-summary";
-import { suggestNextStep } from "@/lib/next-step-suggestion";
 import { useI18n } from "@/lib/i18n/provider";
 import type { ToolMode } from "@/lib/pi-web-preferences";
 
@@ -29,7 +26,6 @@ interface Props {
   onSystemPromptChange?: (prompt: string | null) => void;
   onSessionStatsChange?: (stats: { tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null) => void;
   onContextUsageChange?: (usage: { percent: number | null; contextWindow: number; tokens: number | null } | null) => void;
-  scene?: Scene | null;
   toolMode?: ToolMode;
   advancedMode?: boolean;
   onOpenModels?: () => void;
@@ -102,80 +98,7 @@ function Typewriter({ phrases }: { phrases: string[] }) {
   );
 }
 
-function SceneHeader({
-  scene,
-  actions,
-  latestAssistantText,
-  status,
-  suggestedActionId,
-  lastResultSummary,
-  onStarter,
-  onAction,
-}: {
-  scene: Scene;
-  actions: SceneAction[];
-  latestAssistantText: string;
-  status: string | null;
-  suggestedActionId: string | null;
-  lastResultSummary: string;
-  onStarter: (prompt: string) => void;
-  onAction: (action: SceneAction) => void;
-}) {
-  return (
-    <div className="shrink-0 border-b border-border bg-bg-panel px-4 py-3 backdrop-blur">
-      <div className="mx-auto flex max-w-[980px] flex-wrap items-center gap-3">
-        <div className="min-w-[220px] flex-1">
-          <div className="flex items-center gap-2">
-            <span className="rounded-[6px] border border-border bg-bg-subtle px-2 py-0.5 text-[11px] font-medium text-text-muted">{scene.category}</span>
-            <span className="text-[11px] text-text-dim">{summarizeOutputStyle(scene.outputStyle)}</span>
-          </div>
-          <div className="mt-1 text-[16px] font-semibold leading-snug text-text">{scene.name}</div>
-          <div className="mt-1 max-w-[760px] text-[12px] leading-5 text-text-muted">{scene.description}</div>
-          {lastResultSummary && (
-            <div className="mt-2 max-w-[760px] truncate text-[12px] leading-5 text-text-dim" title={lastResultSummary}>
-              Latest: {lastResultSummary}
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          {actions.map((action) => {
-            const disabled = (action.type === "copy" || action.type === "export") && !latestAssistantText;
-            const isSuggested = action.id === suggestedActionId;
-            const baseClass = "h-8 rounded-[7px] border px-3 text-[12px] font-medium text-text-muted hover:bg-bg-hover hover:text-text disabled:cursor-not-allowed disabled:opacity-40";
-            const stateClass = isSuggested
-              ? "border-[color-mix(in_srgb,var(--accent)_70%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_15%,var(--bg-elevated))] text-text"
-              : "border-border bg-bg-elevated";
-            return (
-              <button
-                key={action.id}
-                onClick={() => onAction(action)}
-                disabled={disabled}
-                title={action.description}
-                className={`${baseClass} ${stateClass}`}
-              >
-                {status && (action.type === "copy" || action.type === "export") ? status : action.label}
-                {isSuggested && <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent">Suggested</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <div className="mx-auto mt-3 flex max-w-[980px] gap-2 overflow-x-auto pb-1">
-        {scene.suggestedStarters.map((starter) => (
-          <button
-            key={starter.id}
-            onClick={() => onStarter(starter.prompt)}
-            className="shrink-0 rounded-[7px] border border-border bg-bg-subtle px-3 py-1.5 text-[12px] text-text-muted hover:bg-bg-hover hover:text-text"
-          >
-            {starter.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSessionStatsChange, onContextUsageChange, scene, toolMode = "simple", advancedMode = false, onOpenModels }: Props) {
+export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked, modelsRefreshKey, chatInputRef, onBranchDataChange, onSystemPromptChange, onSessionStatsChange, onContextUsageChange, toolMode = "simple", advancedMode = false, onOpenModels }: Props) {
   const { t } = useI18n();
   const {
     loading, error, messages, entryIds, streamState,
@@ -193,7 +116,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
     sessionIdRef,
   } = useAgentSession({
     session, newSessionCwd, onAgentEnd, onSessionCreated, onSessionForked,
-    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, scene, toolMode,
+    modelsRefreshKey, onBranchDataChange, onSystemPromptChange, toolMode,
   });
 
   const { soundEnabled, onSoundToggle, playDoneSound } = useAudio();
@@ -203,9 +126,6 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
   soundEnabledRef.current = soundEnabled;
   const sessionRef = useRef(session);
   sessionRef.current = session;
-  const sceneRef = useRef(scene);
-  sceneRef.current = scene;
-
   // Wrap agent event handler to play sound on agent_end and to push the latest
   // assistant output into product-session metadata so the history view can
   // show a real summary. The PATCH is fire-and-forget; failures only warn.
@@ -221,8 +141,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
           const sessionName = sessionRef.current?.name ?? id;
           void notifyAgentEnd({ sessionId: id, sessionName }).catch(() => {});
         }
-        const activeScene = sceneRef.current;
-        if (id && activeScene) {
+        if (id) {
           const summary = lastResultSummaryRef.current;
           void fetch(`/api/product-sessions/${encodeURIComponent(id)}`, {
             method: "PATCH",
@@ -287,7 +206,6 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
     ? (modelThinkingLevelMaps[`${displayModelValue.provider}:${displayModelValue.modelId}`] ?? null)
     : null;
 
-  const sceneActions = useMemo(() => scene ? getActionsForScene(scene) : [], [scene]);
   const latestAssistantText = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
@@ -300,66 +218,12 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
     }
     return "";
   })();
-  const [sceneActionStatus, setSceneActionStatus] = useState<string | null>(null);
-
-  const lastActionIdRef = useRef<string | null>(null);
   const lastResultSummary = useMemo(
     () => summarizeForHistory(latestAssistantText, 120),
     [latestAssistantText],
   );
   const lastResultSummaryRef = useRef(lastResultSummary);
   lastResultSummaryRef.current = lastResultSummary;
-  const suggestedActionId = useMemo(
-    () => (scene ? suggestNextStep(latestAssistantText, scene, lastActionIdRef.current)?.id ?? null : null),
-    [latestAssistantText, scene],
-  );
-
-  const copyLatestResult = useCallback(async () => {
-    if (!latestAssistantText) return;
-    await navigator.clipboard?.writeText(latestAssistantText);
-    setSceneActionStatus("Copied");
-    setTimeout(() => setSceneActionStatus(null), 1500);
-  }, [latestAssistantText]);
-
-  const exportLatestResult = useCallback(() => {
-    if (!scene || !latestAssistantText) return;
-    const markdown = buildMarkdownExport({
-      scene,
-      title: session?.productTitle ?? session?.name ?? scene.name,
-      content: latestAssistantText,
-      generatedAt: new Date().toISOString(),
-    });
-    const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${scene.id}-${Date.now()}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setSceneActionStatus("Exported");
-    setTimeout(() => setSceneActionStatus(null), 1500);
-  }, [latestAssistantText, scene, session?.name, session?.productTitle]);
-
-  const runSceneAction = useCallback((action: SceneAction) => {
-    if (action.type === "copy") {
-      copyLatestResult();
-      return;
-    }
-    if (action.type === "export") {
-      exportLatestResult();
-      return;
-    }
-    const prompt = buildActionPrompt(action, {
-      latestText: latestAssistantText || null,
-      outputStyle: scene?.outputStyle ?? null,
-    });
-    const value = actionPromptAsText(prompt);
-    if (!value) return;
-    lastActionIdRef.current = action.id;
-    chatInputRef?.current?.insertIfEmpty(value);
-  }, [chatInputRef, copyLatestResult, exportLatestResult, latestAssistantText, scene?.outputStyle]);
-
   const chatInputElement = (
     <ChatInput
       ref={chatInputRef}
@@ -468,29 +332,10 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
         </div>
       )}
 
-      {scene && (
-        <SceneHeader
-          scene={scene}
-          actions={sceneActions}
-          latestAssistantText={latestAssistantText}
-          status={sceneActionStatus}
-          suggestedActionId={suggestedActionId}
-          lastResultSummary={lastResultSummary}
-          onStarter={(prompt) => chatInputRef?.current?.insertIfEmpty(prompt)}
-          onAction={runSceneAction}
-        />
-      )}
-
       {isEmptyNew ? (
         <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8">
           <div className="w-full max-w-[820px]">
-            {scene ? (
-              <div className="mb-4 rounded-[8px] border border-border bg-bg-panel p-4">
-                <div className="text-[13px] font-semibold text-text">{scene.name}</div>
-                <div className="mt-2 text-[12px] leading-5 text-text-muted">{scene.defaultPrompt}</div>
-              </div>
-            ) : (
-              <div
+            <div
                 className="mb-3"
                 style={{
                   display: "flex",
@@ -518,7 +363,6 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
                   </span>
                 </div>
               </div>
-            )}
             {chatInputElement}
           </div>
         </div>

@@ -15,7 +15,7 @@
 - [ ] 新机器无需单独安装 Node，亦可完成首条对话（依赖 M1-A 壳）
 - [x] 自动整理长对话、失败自动重试默认开启，且可在设置中关闭（pi-web）
 - [x] 导出 HTML 可在 Finder 中正常打开（pi-web 下载；壳内打开待 M1-A 联调）
-- [ ] 任务结束时收到系统通知，点击可回到对应会话（pi-web：`notifyAgentEnd` + Web Push 回退已完成；需 M1-A 壳 `piNative.showNotification` + 深链）
+- [x] 任务结束时收到系统通知，点击可回到对应会话（pi-web：`notifyAgentEnd` + Web Push 回退；开发壳 `piNative.showNotification` + `?session=` 深链已实现；`.app` 打包待办）
 
 ---
 
@@ -25,26 +25,27 @@
 
 | ID | 任务 | 完成 |
 |----|------|------|
-| PL-01 | 启动时探测本地服务（默认 `30141`），显示「正在启动」/ 失败态 | [ ] |
-| PL-02 | 服务不可用时提供「重试 / 重启服务」 | [ ] |
-| PL-03 | 菜单：退出、重启服务、打开数据文件夹（`~/.pi/agent` 说明） | [ ] |
-| PL-06 | 工作区目录选择与 macOS 文件访问授权一致 | [ ] |
+| PL-01 | 启动时探测本地服务（默认 `30141`），显示「正在启动」/ 失败态 | [x]（`macos/PiWorkbench` 开发壳；`.app` 打包待办） |
+| PL-02 | 服务不可用时提供「重试 / 重启服务」 | [x]（开发壳；`.app` 打包待办） |
+| PL-03 | 菜单：退出、重启服务、打开数据文件夹（`~/.pi/agent` 说明） | [x]（开发壳命令菜单；`.app` 打包待办） |
+| PL-06 | 工作区目录选择与 macOS 文件访问授权一致 | [x]（开发壳：`pickWorkspaceDirectory` + security-scoped bookmark；`.app` Sandbox + Node 子进程待联调） |
 | — | 文档化壳 ↔ pi-web 启动参数（`PI_CODING_AGENT_DIR`、端口） | [x]（[macos-shell-contract.md](./macos-shell-contract.md)；壳实现待 M1-A） |
 
 ---
 
-## M1-B — 首次运行向导
+## M1-B — 工作台首页（无向导）
+
+产品无 `FirstRunWizard`、无场景卡片、无 `/api/onboarding/*`；首启与日常均进入 Workbench 首页。
 
 | ID | 任务 | 完成 |
 |----|------|------|
-| — | 检测 `~/.pi/agent`、models 是否可用 | [x] |
-| — | 步骤 1：选择工作区文件夹（与 CLI 的 cwd 一致；记入 preferences，非仅 `~/pi-cwd-*`） | [x] |
-| — | 步骤 2：连接至少一个 AI 服务（OAuth 或 models.json；`hasModels` 与 OAuth 二选一） | [x] |
-| — | 步骤 3：可选开启完成通知 | [x] |
-| — | 步骤 4：从场景卡片完成首条消息 | [x] |
-| — | 完成后不再强制显示向导（本地标记已 onboarding） | [x] |
+| — | 默认进入 WorkbenchHome（新建对话 + 最近记录） | [x] |
+| — | 设置 / `piNative.pickWorkspaceDirectory` 配置 `defaultWorkspaceCwd`（`PUT /api/preferences`） | [x] |
+| — | 无可用模型时横幅 +「配置模型」（`ModelsConfig`） | [x] |
+| — | 从首页「新建对话」发起首条消息 | [x] |
+| — | 通知权限在设置中配置（非向导步骤） | [x] |
 
-**模块**：新 `FirstRunWizard`（或 `components/onboarding/`）、`AppShell` 路由门控
+**模块**：`WorkbenchHome`、`WorkbenchSettings`、`AppShell`
 
 ---
 
@@ -61,13 +62,14 @@
 
 ---
 
-## M1-D — 场景首页与工具模式
+## M1-D — 工作台首页与工具模式
 
 | ID | 任务 | 完成 |
 |----|------|------|
-| PR-01 | 默认进入 Workbench 场景首页，而非裸会话树 | [x] |
+| PR-01 | 默认进入 Workbench 首页（新建对话 + 最近记录），非裸会话树 | [x] |
 | PR-02 | 工具「简洁模式」：仅展示「可读文件 / 可改文件」等能力描述 | [x] |
 | — | 「高级 / 开发者」入口可进入完整工具预设与会话侧栏 | [x] |
+| — | 移除预设「场景」卡片（企业知识/报告/客服/流程等） | [x] |
 
 **模块**：`WorkbenchHome.tsx`、`AppShell.tsx`、`ToolPanel` / `ChatInput`
 
@@ -92,11 +94,11 @@
 | ID | 任务 | 完成 |
 |----|------|------|
 | PI-03 | `rpc-manager` 接线 `export_html` | [x] |
-| PI-03 | 聊天或设置中「导出对话」→ 下载 `.html` | [x] |
+| PI-03 | 聊天或设置中「导出对话」→ 下载 `.html` | [ ]（RPC 已接；M1 产品 UI 不暴露下载） |
 | PI-04 | `rpc-manager` 接线 `get_session_stats`（或等价聚合） | [x] |
-| PI-04 | 设置页展示白话用量（输入/输出/费用摘要） | [x] |
+| PI-04 | 对话顶栏「用量报告」悬停展示（输入/输出/费用） | [x] |
 
-**模块**：`lib/rpc-manager.ts`、`ChatWindow` 或 `WorkbenchSettings`
+**模块**：`lib/rpc-manager.ts`、`SessionReportButton.tsx`
 
 ---
 
@@ -105,10 +107,10 @@
 | ID | 任务 | 完成 |
 |----|------|------|
 | — | pi-web：`agent_end` → `notifyAgentEnd`（`piNative` 或 `POST /api/notifications/agent-end`） | [x] |
-| PL-04 | 壳：`piNative.showNotification` 系统通知 | [ ] |
-| — | 壳：通知点击深链到 `?session=<id>` | [ ] |
+| PL-04 | 壳：`piNative.showNotification` 系统通知 | [x]（开发壳；`.app` 打包待办） |
+| — | 壳：通知点击深链到 `?session=<id>` | [x]（开发壳；`.app` 打包待办） |
 | — | 与现有 Web Push / `lib/push-notifications.ts` 策略不冲突 | [x] |
-| — | 向导中可关闭通知权限 | [x] |
+| — | 设置中可配置通知权限（原向导步骤已移除） | [x] |
 
 ---
 
@@ -117,7 +119,7 @@
 | ID | 任务 | 完成 |
 |----|------|------|
 | — | 侧栏新建会话后列表及时更新（`pinnedSession` / `filterCwd` 回归） | [x] |
-| — | `zh-CN` / `en` 覆盖向导、账户、设置新增文案 | [x] |
+| — | `zh-CN` / `en` 覆盖账户、设置、场景首页文案 | [x] |
 | — | 相关 RPC/侧栏测试补充或更新 | [x] |
 | — | `npm run lint`、`tsc --noEmit` 通过 | [x] |
 
@@ -151,3 +153,5 @@
 | 2026-06-03 | 对齐 [product-principles.md](./product-principles.md) |
 | 2026-06-03 | pi-web 侧 M1-B～H 收尾：通知桥、`hasModels` 向导、设置页最近会话导出/用量、`toolMode` 新建会话；`tsc`/lint/vitest 通过 |
 | 2026-06-03 | 清单审计：pi-web 可交付项已勾选；M1-A/PL-04 壳项与里程碑「免 Node」保持未勾选；`GET /api/health` + 壳契约文档已就绪 |
+| 2026-06-03 | PL-06：`WorkspaceBookmarkStore` + `package-macos-app.sh` 骨架；里程碑通知项勾选（开发壳） |
+| 2026-06-03 | 移除 `FirstRunWizard`、预设 Scenes 与 `/api/onboarding/*`；首页为 WorkbenchHome（新建对话 + 最近记录） |

@@ -6,7 +6,6 @@ const PUBLIC_API_PREFIXES = [
   "/api/remote/pair",
   "/api/remote/client",
   "/api/health",
-  "/api/onboarding/status",
 ];
 
 function isPublicApiPath(pathname: string): boolean {

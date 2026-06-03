@@ -17,9 +17,6 @@ function sanitizePatch(body: unknown): Partial<PiWebPreferences> {
   const input = body as Record<string, unknown>;
   const patch: Partial<PiWebPreferences> = {};
 
-  if (typeof input.onboardingCompletedAt === "string") {
-    patch.onboardingCompletedAt = input.onboardingCompletedAt;
-  }
   if (typeof input.defaultWorkspaceCwd === "string" && input.defaultWorkspaceCwd.trim()) {
     patch.defaultWorkspaceCwd = input.defaultWorkspaceCwd.trim();
   }
@@ -28,9 +25,6 @@ function sanitizePatch(body: unknown): Partial<PiWebPreferences> {
   }
   if (typeof input.notificationsEnabled === "boolean") {
     patch.notificationsEnabled = input.notificationsEnabled;
-  }
-  if (typeof input.lastOpenedSceneId === "string") {
-    patch.lastOpenedSceneId = input.lastOpenedSceneId;
   }
   if (typeof input.autoCompactionEnabled === "boolean") {
     patch.autoCompactionEnabled = input.autoCompactionEnabled;

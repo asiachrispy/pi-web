@@ -13,7 +13,8 @@ interface Props {
   onOpenSettings?: () => void;
   isSettingsView?: boolean;
   initialSessionId?: string | null;
-  onInitialRestoreDone?: () => void;
+  /** Called when initial ?session= restore finishes; `found` is false if the id is missing or sessions could not load. */
+  onInitialRestoreDone?: (found: boolean) => void;
   refreshKey?: number;
   onSessionDeleted?: (sessionId: string) => void;
   /** Active session from AppShell — shown immediately before /api/sessions catches up */
@@ -282,31 +283,66 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
 
   // Auto-select cwd and restore session from URL on first load
   useEffect(() => {
-    if (allSessions.length === 0) return;
+    if (!initialSessionId || restoredRef.current) return;
+    if (loading) return;
+
+    const finishRestore = (found: boolean) => {
+      restoredRef.current = true;
+      onInitialRestoreDone?.(found);
+    };
 
     if (selectedCwd === null) {
       if (selectedCwdProp) {
         setSelectedCwd(selectedCwdProp);
-        return;
-      }
-      // If restoring a session, set cwd to match that session
-      if (initialSessionId && !restoredRef.current) {
-        restoredRef.current = true;
         const target = allSessions.find((s) => s.id === initialSessionId);
-        if (target) {
-          setSelectedCwd(target.cwd);
+        if (target && target.cwd === selectedCwdProp) {
           onSelectSession(target, true);
           return;
         }
-        // Session not found — notify parent so it can show the placeholder
-        onInitialRestoreDone?.();
+        finishRestore(false);
+        return;
       }
+
+      const target = allSessions.find((s) => s.id === initialSessionId);
+      if (target) {
+        setSelectedCwd(target.cwd);
+        onSelectSession(target, true);
+        return;
+      }
+
+      finishRestore(false);
       const cwds = getRecentCwds(allSessions);
       if (cwds.length > 0) setSelectedCwd(cwds[0]);
+      return;
     }
-  }, [allSessions, selectedCwd, selectedCwdProp, initialSessionId, onSelectSession, onInitialRestoreDone]);
 
-  const filterCwd = selectedCwdProp ?? selectedCwd;
+    const target = allSessions.find((s) => s.id === initialSessionId);
+    if (target) {
+      onSelectSession(target, true);
+      return;
+    }
+    finishRestore(false);
+  }, [loading, allSessions, selectedCwd, selectedCwdProp, initialSessionId, onSelectSession, onInitialRestoreDone]);
+
+  useEffect(() => {
+    if (selectedCwd !== null) return;
+    if (selectedCwdProp) setSelectedCwd(selectedCwdProp);
+  }, [selectedCwdProp, selectedCwd]);
+
+  const prevSelectedSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      selectedSessionId &&
+      selectedSessionId !== prevSelectedSessionIdRef.current &&
+      selectedCwdProp
+    ) {
+      setSelectedCwd(selectedCwdProp);
+    }
+    prevSelectedSessionIdRef.current = selectedSessionId;
+  }, [selectedSessionId, selectedCwdProp]);
+
+  // Local dropdown choice wins over parent `selectedCwdProp` (activeCwd / session cwd).
+  const filterCwd = selectedCwd ?? selectedCwdProp;
 
   const commitCustomPath = useCallback(() => {
     const path = customPathValue.trim();
@@ -401,16 +437,16 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 flexShrink: 0,
                 transition: "background 0.12s, color 0.12s, border-color 0.12s",
               }}
-              title={selectedCwd ? t("sessionSidebar.newSessionIn", { cwd: selectedCwd }) : t("sessionSidebar.selectProjectFirst")}
+              title={filterCwd ? t("sessionSidebar.newSessionIn", { cwd: filterCwd }) : t("sessionSidebar.selectProjectFirst")}
               onMouseEnter={(e) => {
-                if (!selectedCwd) return;
+                if (!filterCwd) return;
                 e.currentTarget.style.background = "var(--bg-selected)";
                 e.currentTarget.style.color = "var(--accent)";
                 e.currentTarget.style.borderColor = "rgba(37,99,235,0.35)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = "var(--bg-hover)";
-                e.currentTarget.style.color = selectedCwd ? "var(--text-muted)" : "var(--text-dim)";
+                e.currentTarget.style.color = filterCwd ? "var(--text-muted)" : "var(--text-dim)";
                 e.currentTarget.style.borderColor = "var(--border)";
               }}
             >
@@ -541,12 +577,12 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                   }}
                   title={cwd}
                 >
-                  {cwd === selectedCwd && (
+                  {cwd === filterCwd && (
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                       <polyline points="1.5 5 4 7.5 8.5 2.5" />
                     </svg>
                   )}
-                  {cwd !== selectedCwd && <span style={{ width: 10, flexShrink: 0 }} />}
+                  {cwd !== filterCwd && <span style={{ width: 10, flexShrink: 0 }} />}
                   <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortenCwd(cwd, homeDir)}</span>
                 </button>
               ))}

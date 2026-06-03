@@ -3,8 +3,8 @@ import { GET } from "@/app/api/health/route";
 
 describe("GET /api/health", () => {
   it("returns ok for loopback requests", async () => {
-    const req = new Request("http://127.0.0.1:30141/api/health", {
-      headers: { host: "127.0.0.1:30141" },
+    const req = new Request("http://127.0.0.1:30142/api/health", {
+      headers: { host: "127.0.0.1:30142" },
     });
     const res = await GET(req);
     expect(res.status).toBe(200);

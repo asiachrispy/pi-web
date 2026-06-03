@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { useI18n } from "@/lib/i18n/provider";
-import type { ProductHistoryItem, ProductSessionStatus } from "@/lib/scenes";
+import type { ProductHistoryItem } from "@/lib/product-history";
+import type { ProductSessionStatus } from "@/lib/scene-metadata";
 
 interface Props {
   item: ProductHistoryItem;
@@ -55,11 +56,8 @@ export function WorkbenchHistoryDetail({ item, onClose, onOpenChat }: Props) {
       >
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="rounded-[6px] border border-border bg-bg-subtle px-2 py-0.5 text-[11px] font-medium text-text-muted">
-                {item.sceneId ? t("workbenchHistoryDetail.scene") : t("workbenchHistoryDetail.general")}
-              </span>
-              <span className="truncate text-[12px] text-text-dim">{item.sceneName}</span>
+            <div className="truncate text-[12px] text-text-dim" title={item.cwd}>
+              {item.cwd}
             </div>
             <h2 className="mt-1.5 truncate text-[18px] font-semibold leading-snug text-text" title={item.title}>
               {item.title}

@@ -4,13 +4,13 @@
 
 1. 将 `Pi.app` 拖入「应用程序」文件夹。
 2. 双击打开。首次启动可能需要最多 30 秒等待本地服务就绪。
-3. 按首次运行向导完成：工作区 → AI 服务 → 通知 → 首条对话。
+3. 在场景首页选场景发首条消息；工作区与 AI 服务在「设置」中配置。
 
 无需单独安装 Node.js；App 内嵌运行时与 pi-web 构建产物。
 
 ## 工作区
 
-- 向导中选择的文件夹即 pi 的 **cwd（工作区）**。
+- 设置中选择的文件夹即 pi 的 **cwd（工作区）**（macOS 壳可调 `pickWorkspaceDirectory`）。
 - 路径保存在 `~/.pi/agent/pi-web-preferences.json` 的 `defaultWorkspaceCwd`。
 - 新建对话默认使用该工作区。
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n/provider";
-import type { ProductHistoryItem } from "@/lib/scenes";
+import type { ProductHistoryItem } from "@/lib/product-history";
 import { WorkbenchHistoryDetail } from "./WorkbenchHistoryDetail";
 
 interface Props {
@@ -50,7 +50,7 @@ export function WorkbenchHistory({ onOpenHistory }: Props) {
                 <div className="truncate text-[13px] font-semibold text-text">{item.title}</div>
                 <div className="mt-1 truncate text-[12px] text-text-muted">{item.summary}</div>
               </button>
-              <div className="text-[12px] text-text-muted max-[720px]:hidden">{item.sceneName}</div>
+              <div className="truncate text-[12px] text-text-muted max-[720px]:hidden">{item.cwd}</div>
               <div className="text-[11px] text-text-dim max-[720px]:hidden">{new Date(item.updatedAt).toLocaleString(locale)}</div>
               <button
                 onClick={(e) => {

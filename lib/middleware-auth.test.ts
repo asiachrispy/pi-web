@@ -32,10 +32,10 @@ describe("middleware auth policy", () => {
 
   it("allows loopback same-origin when remote is disabled", async () => {
     const { authorizeRequest } = await import("./remote-auth");
-    const req = new Request("http://127.0.0.1:30141/api/sessions", {
+    const req = new Request("http://127.0.0.1:30142/api/sessions", {
       headers: {
-        host: "127.0.0.1:30141",
-        origin: "http://127.0.0.1:30141",
+        host: "127.0.0.1:30142",
+        origin: "http://127.0.0.1:30142",
       },
     });
     expect(authorizeRequest(req).authorized).toBe(true);
@@ -53,9 +53,9 @@ describe("middleware auth policy", () => {
     const config = loadRemoteAuthConfig();
     vi.stubEnv("PI_WEB_REMOTE", "1");
     vi.stubEnv("PI_WEB_REMOTE_SIGNING_SECRET", config!.signingSecret);
-    const hostReq = new Request("http://127.0.0.1:30141/api/remote", {
+    const hostReq = new Request("http://127.0.0.1:30142/api/remote", {
       method: "POST",
-      headers: { host: "127.0.0.1:30141", "user-agent": "host" },
+      headers: { host: "127.0.0.1:30142", "user-agent": "host" },
     });
     const offer = createPairingOffer(hostReq);
     const { cookieValue } = redeemPairingCode(hostReq, offer.code);

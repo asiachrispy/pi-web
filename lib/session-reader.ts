@@ -4,7 +4,6 @@ import type { SessionEntry, SessionInfo, SessionContext, SessionTreeNode, Assist
 import type { SessionEntry as PiSessionEntry, SessionInfo as PiSessionInfo } from "@earendil-works/pi-coding-agent";
 import { normalizeToolCalls } from "./normalize";
 import { readProductSessionMetadataMap } from "./scene-metadata";
-import { getSceneById } from "./scenes";
 
 export { getAgentDir };
 
@@ -21,7 +20,6 @@ export async function listAllSessions(): Promise<SessionInfo[]> {
   const cache = getPathCache();
   return piSessions.map((s) => {
     const metadata = productMetadata[s.id];
-    const scene = metadata ? getSceneById(metadata.sceneId) : null;
     // Populate path cache so resolveSessionPath works without a full scan
     cache.set(s.id, s.path);
     return {
@@ -34,8 +32,6 @@ export async function listAllSessions(): Promise<SessionInfo[]> {
       messageCount: s.messageCount,
       firstMessage: s.firstMessage || "(no messages)",
       parentSessionId: s.parentSessionPath ? pathToId.get(s.parentSessionPath) : undefined,
-      sceneId: metadata?.sceneId,
-      sceneName: scene?.name,
       productTitle: metadata?.title,
       productStatus: metadata?.status,
       lastResultSummary: metadata?.lastResultSummary,

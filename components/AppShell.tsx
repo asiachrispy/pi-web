@@ -12,31 +12,17 @@ import { BranchNavigator } from "./BranchNavigator";
 import { WorkbenchHistory } from "./WorkbenchHistory";
 import { WorkbenchHome } from "./WorkbenchHome";
 import { WorkbenchSettings } from "./WorkbenchSettings";
-import { FirstRunWizard } from "./onboarding/FirstRunWizard";
 import { RemotePairingHandler } from "./RemotePairingHandler";
 import { RemoteAccessBanner } from "./RemoteAccessBanner";
 import { ServerConnectionBanner } from "./ServerConnectionBanner";
 import { useTheme } from "@/hooks/useTheme";
-import { useCachedResource } from "@/hooks/useControlCollection";
 import { useI18n } from "@/lib/i18n/provider";
 import type { SessionInfo, SessionTreeNode } from "@/lib/types";
 import { SessionReportButton } from "./SessionReportButton";
 import type { ChatInputHandle } from "./ChatInput";
-import { getSceneById, type ProductHistoryItem, type Scene } from "@/lib/scenes";
+import type { ProductHistoryItem } from "@/lib/product-history";
 import type { ToolMode } from "@/lib/pi-web-preferences";
 import { cachePiWebPreferences } from "@/lib/pi-web-preferences-cache";
-
-interface ScenesResponse {
-  scenes?: Scene[];
-  error?: string;
-}
-
-const fetchScenes = async (): Promise<Scene[]> => {
-  const res = await fetch("/api/scenes");
-  const data = (await res.json()) as ScenesResponse;
-  if (data.error) throw new Error(data.error);
-  return data.scenes ?? [];
-};
 
 export function AppShell() {
   const router = useRouter();
@@ -56,26 +42,12 @@ export function AppShell() {
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
   const [workbenchView, setWorkbenchView] = useState<"home" | "history" | "settings" | "chat">("home");
-  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [preferredCwd, setPreferredCwd] = useState<string | null>(null);
   const [toolMode, setToolMode] = useState<ToolMode>("simple");
   const [advancedMode, setAdvancedMode] = useState(false);
-  const [activeScene, setActiveScene] = useState<Scene | null>(null);
-  const [launchingSceneId, setLaunchingSceneId] = useState<string | null>(null);
-
-  // Shared scenes cache (same key as WorkbenchHome / WorkbenchSettings) so
-  // AppShell honors the latest override values from ~/.pi/agent/scene-overrides.json
-  // when looking up a scene by id. The cache is invalidated by WorkbenchSettings
-  // after every PUT/DELETE, so the next lookup here picks up the new merged data.
-  const scenes = useCachedResource<Scene[]>("workbench:scenes", fetchScenes, {
-    staleMs: 15_000,
-    retries: 1,
-  });
-  const scenesRef = useRef<Scene[] | null>(scenes.data);
-  scenesRef.current = scenes.data;
-  const findScene = useCallback((id: string): Scene | null => {
-    return scenesRef.current?.find((s) => s.id === id) ?? getSceneById(id);
-  }, []);
+  const [startingChat, setStartingChat] = useState(false);
+  const [startChatError, setStartChatError] = useState<string | null>(null);
+  const [sessionRestoreNotice, setSessionRestoreNotice] = useState<string | null>(null);
 
   // Branch navigator state — populated by ChatWindow via onBranchDataChange
   const [branchTree, setBranchTree] = useState<SessionTreeNode[]>([]);
@@ -156,8 +128,6 @@ export function AppShell() {
   }, []);
 
   const [initialSessionId] = useState<string | null>(() => searchParams.get("session"));
-  const [initialSceneId] = useState<string | null>(() => searchParams.get("scene"));
-  const initialSceneRestoredRef = useRef(false);
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
   const [gitBranch, setGitBranch] = useState<string | null>(null);
   // True once the initial ?session= URL param has been resolved (or confirmed absent)
@@ -166,11 +136,6 @@ export function AppShell() {
   const suppressCwdBumpRef = useRef(false);
 
   useEffect(() => {
-    void fetch("/api/onboarding/status")
-      .then((res) => res.json())
-      .then((data: { completed?: boolean }) => setOnboardingCompleted(data.completed !== false))
-      .catch(() => setOnboardingCompleted(true));
-
     void fetch("/api/preferences")
       .then((res) => res.json())
       .then((data: { preferences?: { defaultWorkspaceCwd?: string; toolMode?: ToolMode } }) => {
@@ -231,7 +196,6 @@ export function AppShell() {
       if (prev && prev !== cwd) return null;
       return prev;
     });
-    setActiveScene(null);
     setWorkbenchView("home");
     setSessionKey((k) => k + 1);
     // Re-fetch the session list so a brand-new cwd (default dir / custom path
@@ -245,7 +209,6 @@ export function AppShell() {
   const handleSelectSession = useCallback((session: SessionInfo, isRestore = false) => {
     setNewSessionCwd(null);
     setSelectedSession(session);
-    setActiveScene(session.sceneId ? findScene(session.sceneId) : null);
     setWorkbenchView("chat");
     setSessionKey((k) => k + 1);
     setSystemPrompt(null);
@@ -261,29 +224,47 @@ export function AppShell() {
     if (!isRestore) {
       router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
     }
-  }, [router, findScene]);
+  }, [router]);
 
   const handleNewSession = useCallback((_sessionId: string, cwd: string) => {
     setSelectedSession(null);
     setNewSessionCwd(cwd);
-    setActiveScene(null);
     setWorkbenchView("chat");
     setSessionKey((k) => k + 1);
     resetChatChrome();
     router.replace("/", { scroll: false });
   }, [resetChatChrome, router]);
 
+  const handleStartChat = useCallback(async () => {
+    setStartingChat(true);
+    setStartChatError(null);
+    try {
+      const cwd = await ensureWorkbenchCwd();
+      setSelectedSession(null);
+      setNewSessionCwd(cwd);
+      setWorkbenchView("chat");
+      setSessionKey((k) => k + 1);
+      resetChatChrome();
+      router.replace("/", { scroll: false });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setStartChatError(
+        message === "Unable to create default workspace"
+          ? i18nT("appShell.createDefaultWorkspaceError")
+          : message,
+      );
+    } finally {
+      setStartingChat(false);
+    }
+  }, [ensureWorkbenchCwd, i18nT, resetChatChrome, router]);
+
   // Called by ChatWindow when a new session gets its real id from pi
   const handleSessionCreated = useCallback((session: SessionInfo) => {
     setNewSessionCwd(null);
-    setSelectedSession({
-      ...session,
-      sceneId: session.sceneId ?? activeScene?.id,
-      sceneName: session.sceneName ?? activeScene?.name,
-    });
+    setSelectedSession(session);
     setRefreshKey((k) => k + 1);
     router.replace(`?session=${encodeURIComponent(session.id)}`, { scroll: false });
-  }, [activeScene?.id, activeScene?.name, router]);
+  }, [router]);
 
   const handleAgentEnd = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -294,7 +275,6 @@ export function AppShell() {
     setRefreshKey((k) => k + 1);
     setSessionKey((k) => k + 1);
     setNewSessionCwd(null);
-    setActiveScene(null);
     setWorkbenchView("chat");
     setSelectedSession((prev) => ({
       ...(prev ?? { path: "", cwd: "", created: "", modified: "", messageCount: 0, firstMessage: "" }),
@@ -303,9 +283,13 @@ export function AppShell() {
     router.replace(`?session=${encodeURIComponent(newSessionId)}`, { scroll: false });
   }, [router]);
 
-  const handleInitialRestoreDone = useCallback(() => {
+  const handleInitialRestoreDone = useCallback((found: boolean) => {
     setInitialSessionRestored(true);
-  }, []);
+    if (!found) {
+      router.replace("/", { scroll: false });
+      setSessionRestoreNotice(i18nT("appShell.sessionNotFound"));
+    }
+  }, [router, i18nT]);
 
   const handleSessionDeleted = useCallback((sessionId: string) => {
     setRefreshKey((k) => k + 1);
@@ -313,7 +297,6 @@ export function AppShell() {
       const cwd = selectedSession.cwd;
       setSelectedSession(null);
       setNewSessionCwd(cwd ?? null);
-      setActiveScene(null);
       setWorkbenchView("chat");
       setSessionKey((k) => k + 1);
       resetChatChrome();
@@ -322,9 +305,10 @@ export function AppShell() {
   }, [resetChatChrome, selectedSession, router]);
 
   const handleOpenHome = useCallback(() => {
+    setStartChatError(null);
+    setSessionRestoreNotice(null);
     setSelectedSession(null);
     setNewSessionCwd(null);
-    setActiveScene(null);
     setWorkbenchView("home");
     setSessionKey((k) => k + 1);
     resetChatChrome();
@@ -334,7 +318,6 @@ export function AppShell() {
   const handleOpenHistoryView = useCallback(() => {
     setSelectedSession(null);
     setNewSessionCwd(null);
-    setActiveScene(null);
     setWorkbenchView("history");
     setSessionKey((k) => k + 1);
     resetChatChrome();
@@ -344,7 +327,6 @@ export function AppShell() {
   const handleOpenSettingsView = useCallback(() => {
     setSelectedSession(null);
     setNewSessionCwd(null);
-    setActiveScene(null);
     setWorkbenchView("settings");
     setSessionKey((k) => k + 1);
     resetChatChrome();
@@ -366,47 +348,6 @@ export function AppShell() {
     });
   }, []);
 
-  const handleWizardComplete = useCallback(() => {
-    setOnboardingCompleted(true);
-    setWorkbenchView("home");
-    router.replace("/", { scroll: false });
-  }, [router]);
-
-  const handleWizardLaunchScene = useCallback(async (scene: Scene, prompt: string, workspaceCwd: string) => {
-    setOnboardingCompleted(true);
-    setPreferredCwd(workspaceCwd);
-    setActiveCwd(workspaceCwd);
-    setSelectedSession(null);
-    setNewSessionCwd(workspaceCwd);
-    setActiveScene(scene);
-    setWorkbenchView("chat");
-    setSessionKey((k) => k + 1);
-    resetChatChrome();
-    router.replace(`?scene=${encodeURIComponent(scene.id)}`, { scroll: false });
-    window.setTimeout(() => chatInputRef.current?.insertIfEmpty(prompt), 150);
-  }, [resetChatChrome, router]);
-
-  const handleOpenScene = useCallback(async (scene: Scene) => {
-    setLaunchingSceneId(scene.id);
-    try {
-      const cwd = await ensureWorkbenchCwd();
-      setSelectedSession(null);
-      setNewSessionCwd(cwd);
-      setActiveScene(scene);
-      setWorkbenchView("chat");
-      setSessionKey((k) => k + 1);
-      resetChatChrome();
-      router.replace(`?scene=${encodeURIComponent(scene.id)}`, { scroll: false });
-    } finally {
-      setLaunchingSceneId(null);
-    }
-  }, [ensureWorkbenchCwd, resetChatChrome, router]);
-
-  const handleOpenSceneById = useCallback((sceneId: string) => {
-    const scene = findScene(sceneId);
-    if (scene) handleOpenScene(scene);
-  }, [handleOpenScene, findScene]);
-
   const handleOpenHistoryItem = useCallback((item: ProductHistoryItem) => {
     setNewSessionCwd(null);
     setSelectedSession({
@@ -417,28 +358,15 @@ export function AppShell() {
       modified: item.updatedAt,
       messageCount: item.messageCount,
       firstMessage: item.firstMessage,
-      sceneId: item.sceneId ?? undefined,
-      sceneName: item.sceneId ? item.sceneName : undefined,
       productTitle: item.title,
       productStatus: item.status,
       lastResultSummary: item.summary,
     });
-    setActiveScene(item.sceneId ? findScene(item.sceneId) : null);
     setWorkbenchView("chat");
     setSessionKey((k) => k + 1);
     resetChatChrome();
     router.replace(`?session=${encodeURIComponent(item.sessionId)}`, { scroll: false });
-  }, [resetChatChrome, router, findScene]);
-
-  useEffect(() => {
-    if (!initialSceneId || initialSceneRestoredRef.current || initialSessionId) return;
-    const scene = findScene(initialSceneId);
-    if (!scene) return;
-    initialSceneRestoredRef.current = true;
-    handleOpenScene(scene);
-    // Re-run when the shared scenes cache loads so override-only scenes can
-    // be restored on initial mount (static fallback misses them).
-  }, [handleOpenScene, initialSceneId, initialSessionId, scenes.data, findScene]);
+  }, [resetChatChrome, router]);
 
   const handleOpenFile = useCallback((filePath: string, fileName: string) => {
     const tabId = `file:${filePath}`;
@@ -466,9 +394,8 @@ export function AppShell() {
   // Show chat area if a session is selected, or if we have a cwd to start a new session in
   const effectiveNewSessionCwd = newSessionCwd ?? (workbenchView === "chat" && selectedSession === null && activeCwd ? activeCwd : null);
   const showChat = selectedSession !== null || effectiveNewSessionCwd !== null;
-  // While restoring initial session from URL, don't show the placeholder
+  const restoringInitialSession = Boolean(initialSessionId) && !initialSessionRestored;
   const showPlaceholder = initialSessionRestored && !showChat;
-  const activeChatScene = activeScene ?? (selectedSession?.sceneId ? findScene(selectedSession.sceneId) : null);
   const settingsSkillsDisabled = !activeCwd && !selectedSession?.cwd && !newSessionCwd;
 
   const activeFileTab = fileTabs.find((t) => t.id === activeFileTabId) ?? null;
@@ -479,7 +406,6 @@ export function AppShell() {
     if (view === "accounts") {
       setSelectedSession(null);
       setNewSessionCwd(null);
-      setActiveScene(null);
       setWorkbenchView("settings");
       setSessionKey((k) => k + 1);
       resetChatChrome();
@@ -509,33 +435,6 @@ export function AppShell() {
       />
     </>
   );
-
-  if (onboardingCompleted === null) {
-    return (
-      <div className="flex h-dvh items-center justify-center text-[13px] text-text-muted" suppressHydrationWarning>
-        {i18nT("common.loading")}
-      </div>
-    );
-  }
-
-  if (onboardingCompleted === false && !initialSessionId) {
-    return (
-      <>
-        <FirstRunWizard
-          onComplete={handleWizardComplete}
-          onLaunchScene={(scene, prompt, workspaceCwd) => { void handleWizardLaunchScene(scene, prompt, workspaceCwd); }}
-          onOpenModels={handleOpenModelsConfig}
-          modelsRefreshKey={modelsRefreshKey}
-        />
-        {modelsConfigOpen && (
-          <ModelsConfig
-            onClose={() => { setModelsConfigOpen(false); setModelsRefreshKey((k) => k + 1); }}
-            onModelsChanged={() => setModelsRefreshKey((k) => k + 1)}
-          />
-        )}
-      </>
-    );
-  }
 
   return (
     <>
@@ -767,7 +666,6 @@ export function AppShell() {
               onSystemPromptChange={handleSystemPromptChange}
               onSessionStatsChange={handleSessionStatsChange}
               onContextUsageChange={handleContextUsageChange}
-              scene={activeChatScene}
               toolMode={toolMode}
               advancedMode={advancedMode}
               onOpenModels={handleOpenModelsConfig}
@@ -779,19 +677,33 @@ export function AppShell() {
               <WorkbenchSettings
                 onOpenModels={handleOpenModelsConfig}
                 onOpenSkills={() => setSkillsConfigOpen(true)}
-                onOpenSceneId={handleOpenSceneById}
                 onEnterAdvancedMode={handleEnterAdvancedMode}
                 advancedMode={advancedMode}
                 skillsDisabled={settingsSkillsDisabled}
               />
             ) : (
               <WorkbenchHome
-                onOpenScene={handleOpenScene}
+                onStartChat={() => { void handleStartChat(); }}
                 onOpenHistory={handleOpenHistoryItem}
-                launchingSceneId={launchingSceneId}
+                startingChat={startingChat}
+                startChatError={startChatError}
+                sessionRestoreNotice={sessionRestoreNotice}
                 onEnterAdvancedMode={handleEnterAdvancedMode}
               />
             )
+          ) : restoringInitialSession ? (
+            <div
+              style={{
+                height: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-muted)",
+                fontSize: 13,
+              }}
+            >
+              {i18nT("appShell.restoringSession")}
+            </div>
           ) : null}
         </div>
       </div>

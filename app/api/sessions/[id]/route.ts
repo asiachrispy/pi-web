@@ -11,7 +11,6 @@ import {
 import { getRpcSession } from "@/lib/rpc-manager";
 import { rejectUnsafeMutation } from "@/lib/local-request-guard";
 import { readProductSessionMetadataMap } from "@/lib/scene-metadata";
-import { getSceneById } from "@/lib/scenes";
 
 export async function GET(
   req: Request,
@@ -39,7 +38,6 @@ export async function GET(
     const allSessions = await listAllSessions();
     const parentSessionId = allSessions.find((s) => s.id === id)?.parentSessionId;
     const productMetadata = readProductSessionMetadataMap()[id];
-    const scene = productMetadata ? getSceneById(productMetadata.sceneId) : null;
     const info = header ? {
       path: filePath,
       id: header.id,
@@ -56,8 +54,6 @@ export async function GET(
           })()
         : "(no messages)",
       parentSessionId,
-      sceneId: productMetadata?.sceneId,
-      sceneName: scene?.name,
       productTitle: productMetadata?.title,
       productStatus: productMetadata?.status,
       lastResultSummary: productMetadata?.lastResultSummary,

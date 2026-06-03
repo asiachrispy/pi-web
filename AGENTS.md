@@ -3,7 +3,7 @@
 ## Quick Start
 
 ```bash
-npm run dev   # port 30141
+npm run dev   # port 30142 (dev) — production uses 30141
 ```
 
 Typecheck: `node_modules/.bin/tsc --noEmit`
@@ -20,13 +20,46 @@ If you add or change a test file, run `npm run test:run` again after fixing fail
 
 ---
 
+## Dev / Production Isolation
+
+**Rule: 30141 is for daily use; all active development and testing use 30142 only.**
+
+Dev must **never** share the same data directory or port with 30141, and must not hot-reload the 30141 process while you are coding.
+
+### Data isolation
+Dev reads/writes its own session data directory via `PI_CODING_AGENT_DIR` in the **`npm run dev` script** (not `.env.local` — that file is loaded in all modes and would break prod isolation):
+
+```bash
+# package.json
+"dev": "PI_CODING_AGENT_DIR=~/tmp/pi-dev-agent NEXT_DIST_DIR=.next-dev-30142 next dev -p 30142"
+```
+
+30141 uses the default `~/.pi/agent/` via `npm start` or the `pi-web` CLI. The env var is honored by `getAgentDir()` in `lib/agent-dir.ts`.
+
+> **Never set `PI_CODING_AGENT_DIR` in `.env.local`** — Next.js loads it for both dev and production, which hides real sessions on 30141.
+
+### Port isolation
+| Use | Port | Command | Data directory |
+|---|---|---|---|
+| Daily use (stable) | **30141** | `npm start` or `pi-web` | `~/.pi/agent/` |
+| Dev / test (HMR) | **30142** | `npm run dev` | `~/tmp/pi-dev-agent/` |
+
+Do **not** run `next dev` on 30141 while developing on 30142 — both watch the same source tree, so saves will reload 30141 with WIP code. Use `npm start` on 30141 (build first: `npm run build && npm start`).
+
+`dev:prod` (`next dev -p 30141`) exists only for rare HMR debugging against real data; do not run it alongside `npm run dev`.
+
+### Test files
+All test files that mock localhost must use port **30142**, not 30141. Search for `127.0.0.1:30142` or `localhost:30142` to find them.
+
+---
+
 ## Architecture
 
 ```
 Browser                Next.js Server              AgentSession (in-process)
   │                        │                               │
-  ├─ GET /api/sessions ────▶ reads ~/.pi/agent/sessions/   │
-  ├─ GET /api/sessions/[id] reads .jsonl file directly     │
+  ├─ GET /api/sessions ────▶ reads $PI_CODING_AGENT_DIR/sessions/ │
+  ├─ GET /api/sessions/[id] reads .jsonl file directly            │
   │                        │                               │
   ├─ send message ─────────▶ POST /api/agent/[id]          │
   │                        │   startRpcSession() ─────────▶│ createAgentSession()
@@ -40,7 +73,7 @@ Browser                Next.js Server              AgentSession (in-process)
 **Session browsing** (read-only): reads `.jsonl` files directly via `lib/session-reader.ts` — no AgentSession created.  
 **Sending a message**: `startRpcSession()` in `lib/rpc-manager.ts` creates an AgentSession in-process.
 
-**macOS App (M1)**: Shell probes `GET /api/health` (loopback only). Web ↔ shell IPC via `window.piNative` — see `docs/macos-shell-contract.md`, `lib/pi-native.d.ts`, `lib/notify-agent-end.ts`. M1-A `.app` packaging is out of this repo.
+**macOS App (M1)**: Shell probes `GET /api/health` (loopback only). Web ↔ shell IPC via `window.piNative` — see `docs/macos-shell-contract.md`, `lib/pi-native.d.ts`, `lib/notify-agent-end.ts`. Dev shell: `macos/PiWorkbench` (SwiftPM). `.app` bundle + embedded Node is still M1-A packaging work under `macos/README.md`.
 
 ---
 
@@ -57,9 +90,8 @@ app/api/
   agent/[id]/events/route.ts      GET SSE stream
   files/[...path]/route.ts        GET file contents for viewer
   models/route.ts                 GET { models, modelList, defaultModel }
-  models-config/route.ts          GET/PUT — read/write ~/.pi/agent/models.json
+  models-config/route.ts          GET/PUT — read/write $PI_CODING_AGENT_DIR/models.json
   health/route.ts                 GET { ok, version } — loopback probe for macOS shell
-  onboarding/status/route.ts      GET onboarding gate fields
   notifications/agent-end/route.ts POST Web Push fallback when no piNative
 
 lib/
@@ -111,7 +143,7 @@ Pi stores toolCall blocks as `{type:"toolCall", id, name, arguments}` but `ToolC
 Tool names are passed at session creation (`POST /api/agent/new` → `toolNames[]`). For existing sessions, the active preset is inferred on mount via `get_tools` → `getPresetFromTools()`. When tools are fully disabled (`toolNames = []`), `rpc-manager.ts` injects a minimal system prompt via `system-prompt-off.ts` + `DefaultResourceLoader`.
 
 ### Model defaults for new sessions
-`GET /api/models` returns `defaultModel` read from `~/.pi/agent/settings.json`. `ChatWindow` pre-selects this on mount for new sessions.
+`GET /api/models` returns `defaultModel` read from `$PI_CODING_AGENT_DIR/settings.json`. `ChatWindow` pre-selects this on mount for new sessions.
 
 ### SSE reconnect on page refresh mid-stream
 On `ChatWindow` mount, `GET /api/agent/[id]` is called. If `state.isStreaming === true`, SSE is reconnected automatically. `thinkingLevel` and `isCompacting` are also synced from this response.
@@ -124,9 +156,9 @@ Sessions whose first line can't be parsed as a valid header are marked `orphaned
 
 ---
 
-## Pi Session File Format
+**Pi Session File Format**
 
-Location: `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`
+Location: `$PI_CODING_AGENT_DIR/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`
 
 ```jsonl
 {"type":"session","version":3,"id":"<uuid>","timestamp":"...","cwd":"/path","parentSession":"/abs/path/to/parent.jsonl"}

@@ -2,7 +2,19 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, join } from "path";
 import { randomUUID } from "crypto";
 import { getAgentDir } from "@/lib/agent-dir";
-import type { ProductSessionMetadata, ProductSessionMetadataMap } from "./scenes";
+export type ProductSessionStatus = "active" | "completed" | "draft";
+
+export interface ProductSessionMetadata {
+  /** Legacy field from removed scene presets; ignored by UI. */
+  sceneId?: string;
+  title: string;
+  status: ProductSessionStatus;
+  lastResultSummary?: string;
+  startedAt: string;
+  updatedAt: string;
+}
+
+export type ProductSessionMetadataMap = Record<string, ProductSessionMetadata>;
 
 const FILENAME = "product-sessions.json";
 
@@ -38,7 +50,7 @@ function readMap(): ProductSessionMetadataMap {
   } catch (err) {
     // Corrupt store: warn and start fresh; the next write will recover the file.
     if (typeof console !== "undefined") {
-      console.warn("[scene-metadata] failed to parse store, treating as empty:", err);
+      console.warn("[product-sessions] failed to parse store, treating as empty:", err);
     }
     return {};
   }

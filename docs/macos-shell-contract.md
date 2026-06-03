@@ -10,11 +10,15 @@ Pi macOS App 通过内嵌 Node 运行 `bin/pi-web.js`，WKWebView 加载本地 p
 | `HOST` | 固定 `127.0.0.1`（M1 不监听 `0.0.0.0`） |
 | `PI_CODING_AGENT_DIR` | 可选；覆盖 agent 目录（默认 `~/.pi/agent`） |
 
-子进程示例：
+子进程示例（`.app` 内嵌路径，由 `ServerManager` 自动解析）：
 
 ```bash
-HOST=127.0.0.1 PORT=30141 node /Applications/Pi.app/Contents/Resources/pi-web/bin/pi-web.js
+HOST=127.0.0.1 PORT=30141 \
+  /Applications/Pi.app/Contents/Resources/node/bin/node \
+  /Applications/Pi.app/Contents/Resources/pi-web/bin/pi-web.js
 ```
+
+开发壳仍可用环境变量覆盖：`PI_WEB_ROOT`、`NODE`。
 
 ## 健康检查
 
@@ -34,7 +38,7 @@ HOST=127.0.0.1 PORT=30141 node /Applications/Pi.app/Contents/Resources/pi-web/bi
 
 | 方法 | 用途 |
 |------|------|
-| `pickWorkspaceDirectory()` | 首次向导选择工作区 |
+| `pickWorkspaceDirectory()` | 设置页选择工作区；壳持久化 security-scoped bookmark（见 [macos/README.md](../macos/README.md) PL-06） |
 | `showNotification({ title, body, sessionId })` | 任务完成系统通知 |
 | `openPath(path)` | 打开数据目录 / 导出文件 |
 | `restartServer()` | 重启内嵌 pi-web 子进程 |
@@ -55,3 +59,7 @@ HOST=127.0.0.1 PORT=30141 node /Applications/Pi.app/Contents/Resources/pi-web/bi
 - `http://127.0.0.1:30141/?session=<uuid>`
 
 壳统一解析为 WebView 导航。
+
+## 开发壳（本仓库）
+
+`macos/PiWorkbench`（SwiftPM）实现 PL-01～PL-04 联调路径；需本机已安装 Node。见 [macos/README.md](./README.md)。
