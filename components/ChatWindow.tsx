@@ -341,24 +341,6 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
     setTimeout(() => setSceneActionStatus(null), 1500);
   }, [latestAssistantText, scene, session?.name, session?.productTitle]);
 
-  const exportConversationHtml = useCallback(async () => {
-    const sid = session?.id ?? sessionIdRef.current;
-    if (!sid) return;
-    const res = await fetch(`/api/agent/${encodeURIComponent(sid)}/export.html`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `pi-session-${sid.slice(0, 8)}.html`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-    setSceneActionStatus(t("settings.exportConversationAction"));
-    window.setTimeout(() => setSceneActionStatus(null), 1500);
-  }, [session?.id, sessionIdRef, t]);
-
   const runSceneAction = useCallback((action: SceneAction) => {
     if (action.type === "copy") {
       copyLatestResult();
@@ -497,18 +479,6 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
           onStarter={(prompt) => chatInputRef?.current?.insertIfEmpty(prompt)}
           onAction={runSceneAction}
         />
-      )}
-
-      {session && (
-        <div className="flex items-center justify-end border-b border-border px-4 py-2">
-          <button
-            type="button"
-            onClick={() => void exportConversationHtml().catch(() => setSceneActionStatus(t("common.failed")))}
-            className="rounded-[6px] border border-border px-3 py-1.5 text-[12px] font-medium text-text-muted hover:bg-bg-hover hover:text-text"
-          >
-            {t("settings.exportConversationAction")}
-          </button>
-        </div>
       )}
 
       {isEmptyNew ? (
