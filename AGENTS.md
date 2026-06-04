@@ -167,7 +167,10 @@ components/
 Pi stores toolCall blocks as `{type:"toolCall", id, name, arguments}` but `ToolCallContent` uses `{toolCallId, toolName, input}`. `normalizeAgentMessage()` in `lib/normalize.ts` handles tool calls and timeline summary roles — used in `session-reader.ts` (file load) and `useAgentSession` SSE updates.
 
 ### New session tool preset
-Tool names are passed at session creation (`POST /api/agent/new` → `toolNames[]`). For existing sessions, the active preset is inferred on mount via `get_tools` → `getPresetFromTools()`. When tools are fully disabled (`toolNames = []`), `rpc-manager.ts` injects a minimal system prompt via `system-prompt-off.ts` + `DefaultResourceLoader`.
+Tool names are passed at session creation (`POST /api/agent/new` → `toolNames[]`). For existing sessions, the active preset is inferred on mount via `get_tools` → `getPresetFromTools()`. When tools are fully disabled (`toolNames = []`), `rpc-manager.ts` clears `agent.state.systemPrompt` after `createAgentSession`.
+
+### Skills in system prompt
+`startRpcSession()` uses `createAgentResourceLoader()` (`lib/agent-resource-loader.ts`), which appends `PI_WEB_SKILL_WORKFLOW_APPEND` (`lib/skill-system-prompt.ts`) via `DefaultResourceLoader.appendSystemPrompt`. Upstream `formatSkillsForPrompt()` in `@earendil-works/pi-coding-agent` lists installed skills in `<available_skills>` and defines the match → read → recommend-install workflow.
 
 ### Model defaults for new sessions
 `GET /api/models` returns `defaultModel` read from `$PI_CODING_AGENT_DIR/settings.json`. `ChatWindow` pre-selects this on mount for new sessions.

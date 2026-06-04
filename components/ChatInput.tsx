@@ -9,6 +9,7 @@ import { ShareConversationModal } from "./ShareConversationModal";
 import {
   filterSlashCommands,
   getSlashCompletionAtCursor,
+  insertSlashCommandAtCursor,
   type SlashCommandEntry,
 } from "@/lib/slash-commands";
 import { normalizeFilePathRef, type FilePathRef } from "@/lib/message-file-refs";
@@ -69,7 +70,6 @@ interface Props {
   sessionId?: string | null;
   slashCommandsEnabled?: boolean;
   slashCommands?: SlashCommandEntry[];
-  onSlashCommand?: (message: string) => void;
   onOpenSettings?: () => void;
   onOpenFile?: (filePath: string, fileName: string) => void;
 }
@@ -95,7 +95,6 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   sessionId = null,
   slashCommandsEnabled = false,
   slashCommands = [],
-  onSlashCommand,
   onOpenFile,
 }: Props, ref) {
   const { t } = useI18n();
@@ -312,13 +311,21 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   }, []);
 
   const applySlashCommand = useCallback((name: string) => {
-    if (!slashCompletion || !onSlashCommand) return;
-    const slashIdx = slashCompletion.replaceStart - 1;
-    const next = value.slice(0, slashIdx) + value.slice(cursorPos);
-    setValue(next);
-    onSlashCommand(`/${name}`);
-    requestAnimationFrame(() => textareaRef.current?.focus());
-  }, [slashCompletion, onSlashCommand, value, cursorPos]);
+    const ta = textareaRef.current;
+    const pos = ta ? (ta.selectionStart ?? ta.value.length) : cursorPos;
+    const inserted = insertSlashCommandAtCursor(value, pos, name);
+    if (!inserted) return;
+    setValue(inserted.text);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(inserted.cursor, inserted.cursor);
+      setCursorPos(inserted.cursor);
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    });
+  }, [value, cursorPos]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -333,7 +340,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
           setSlashHighlight((i) => (i - 1 + filteredSlashCommands.length) % filteredSlashCommands.length);
           return;
         }
-        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+        if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey && !e.nativeEvent.isComposing) {
           e.preventDefault();
           const picked = filteredSlashCommands[slashHighlight];
           if (picked) applySlashCommand(picked.name);

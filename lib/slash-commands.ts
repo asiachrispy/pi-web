@@ -58,3 +58,19 @@ export function getSlashCompletionAtCursor(text: string, cursor: number): { quer
   const replaceStart = before.length - match[0].length + (match[0].startsWith("/") ? 1 : match[0].indexOf("/") + 1);
   return { query, replaceStart };
 }
+
+/** Replace the partial `/query` at the cursor with a full command; does not send. */
+export function insertSlashCommandAtCursor(
+  text: string,
+  cursor: number,
+  name: string,
+): { text: string; cursor: number } | null {
+  const completion = getSlashCompletionAtCursor(text, cursor);
+  if (!completion) return null;
+  const slashIdx = completion.replaceStart - 1;
+  const insertion = `/${name} `;
+  return {
+    text: text.slice(0, slashIdx) + insertion + text.slice(cursor),
+    cursor: slashIdx + insertion.length,
+  };
+}

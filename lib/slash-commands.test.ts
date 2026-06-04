@@ -3,6 +3,7 @@ import {
   collectSlashCommands,
   filterSlashCommands,
   getSlashCompletionAtCursor,
+  insertSlashCommandAtCursor,
 } from "./slash-commands";
 
 describe("slash-commands", () => {
@@ -31,5 +32,14 @@ describe("slash-commands", () => {
     expect(getSlashCompletionAtCursor("/fix", 4)).toEqual({ query: "fix", replaceStart: 1 });
     expect(getSlashCompletionAtCursor("hello /sk", 9)).toEqual({ query: "sk", replaceStart: 7 });
     expect(getSlashCompletionAtCursor("no slash", 8)).toBeNull();
+  });
+
+  it("inserts a picked command without sending", () => {
+    const text = "为什么不直接调用 /gpt";
+    const cursor = text.length;
+    expect(insertSlashCommandAtCursor(text, cursor, "skill:gpt-image-2")).toEqual({
+      text: "为什么不直接调用 /skill:gpt-image-2 ",
+      cursor: "为什么不直接调用 /skill:gpt-image-2 ".length,
+    });
   });
 });

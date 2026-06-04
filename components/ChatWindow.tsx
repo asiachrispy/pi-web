@@ -298,7 +298,6 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
       sessionId={activeSessionId}
       slashCommandsEnabled={slashCommandsEnabled && !isNew}
       slashCommands={slashCommands}
-      onSlashCommand={slashCommandsEnabled ? handleSend : undefined}
       onOpenSettings={onOpenSettings}
       onOpenFile={onOpenFile}
     />

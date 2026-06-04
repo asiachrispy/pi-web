@@ -1,6 +1,7 @@
 import { createAgentSession, DEFAULT_COMPACTION_SETTINGS, findCutPoint, SessionManager } from "@earendil-works/pi-coding-agent";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createAgentResourceLoader } from "@/lib/agent-resource-loader";
 import { getAgentDir } from "@/lib/agent-dir";
 import { cacheSessionPath } from "./session-reader";
 import { lookupModel } from "./resolve-model";
@@ -356,10 +357,13 @@ export async function startRpcSession(
       toolsOption = toolNames.length === 0 ? [] : allCodingToolNames;
     }
 
+    const resourceLoader = await createAgentResourceLoader(cwd);
+
     const { session: inner } = await createAgentSession({
       cwd,
       agentDir,
       sessionManager,
+      resourceLoader,
       ...(toolsOption !== undefined ? { tools: toolsOption } : {}),
     });
 

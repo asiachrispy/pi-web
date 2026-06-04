@@ -13,6 +13,7 @@
 - **Centralized action policy**: `lib/scene-action-policy.ts` owns the prompt template per action alias (`refine`, `summarize`, `translate`, `followup`, `export`) and a generic fallback for unknown actions, so the action prompt and the next-step suggestion share one source of truth.
 
 ### Changed
+- **Agent skill workflow**: append Pi Web guidance to the system prompt so the model matches user requests to installed skills (read SKILL.md or `/skill:name`), and when none fit recommends a `skill:<name>` / skills.sh package for Settings → Skills install instead of improvising or auto-sending.
 - **API auth**: Node.js middleware on `/api/*` plus per-route `requireApiAuth`; replaces `PI_WEB_ALLOW_REMOTE_MUTATIONS` (deprecated, still honored temporarily).
 - **`getScenes` and `getSceneById` now return a shallow clone of the static scene** (no I/O, no `scene-overrides` read). New `getScenesWithOverrides(map)` and `getSceneByIdWithOverride(id, override)` variants return merged scenes for server-side callers that need to honor `scene-overrides.json` (`app/api/scenes`, `app/api/scenes/[id]`, `app/api/scenes/[id]/launch`). The `mergeSceneWithOverride` helper is exported and unit-tested.
 - **`app/api/product-sessions/[id]` metadata**: PATCH endpoint now supports updating `summary` and `lastActionId` on the product-session metadata so the rich-history detail modal and smart next-step suggestion survive page reloads.
