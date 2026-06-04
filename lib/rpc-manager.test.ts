@@ -1,11 +1,21 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const sessionManagerMock = vi.hoisted(() => ({
+  open: vi.fn(),
+  create: vi.fn(),
+}));
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
   createAgentSession: vi.fn(),
-  SessionManager: {},
+  SessionManager: sessionManagerMock,
 }));
 
 describe("AgentSessionWrapper", () => {
+  beforeEach(() => {
+    sessionManagerMock.open.mockReset();
+    sessionManagerMock.create.mockReset();
+  });
+
   it("subscribes to inner events and unsubscribes on destroy", async () => {
     vi.useFakeTimers();
     const { AgentSessionWrapper } = await import("./rpc-manager");
@@ -122,5 +132,75 @@ describe("AgentSessionWrapper", () => {
     const result = await wrapper.send({ type: "navigate_tree", targetId: "leaf-2", summarize: true });
     expect(navigateTree).toHaveBeenCalledWith("leaf-2", { summarize: true });
     expect(result).toEqual({ cancelled: false });
+  });
+
+  it("destroys the wrapper after creating a fork", async () => {
+    const { AgentSessionWrapper } = await import("./rpc-manager");
+    const unsubscribe = vi.fn();
+    const sourceManager = {
+      isPersisted: () => true,
+      getSessionDir: () => "/tmp/sessions",
+      getEntry: vi.fn(() => ({ id: "entry-1", parentId: "parent-1" })),
+    };
+    sessionManagerMock.open
+      .mockReturnValueOnce({
+        createBranchedSession: vi.fn(() => "/tmp/sessions/fork.jsonl"),
+      })
+      .mockReturnValueOnce({
+        getSessionId: () => "forked-session",
+      });
+    const inner = {
+      sessionId: "s1",
+      sessionFile: "/tmp/sessions/source.jsonl",
+      sessionManager: sourceManager,
+      subscribe: vi.fn(() => unsubscribe),
+    };
+    const wrapper = new AgentSessionWrapper(inner as never);
+    wrapper.start();
+
+    await expect(wrapper.send({ type: "fork", entryId: "entry-1" })).resolves.toEqual({
+      cancelled: false,
+      newSessionId: "forked-session",
+    });
+
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(sessionManagerMock.open).toHaveBeenNthCalledWith(1, "/tmp/sessions/source.jsonl", "/tmp/sessions");
+    expect(sessionManagerMock.open).toHaveBeenNthCalledWith(2, "/tmp/sessions/fork.jsonl", "/tmp/sessions");
+    await expect(wrapper.send({ type: "get_session_stats" })).rejects.toThrow("Session is closed");
+  });
+
+  it("destroys the wrapper after cloning the active branch", async () => {
+    const { AgentSessionWrapper } = await import("./rpc-manager");
+    const unsubscribe = vi.fn();
+    const sourceManager = {
+      isPersisted: () => true,
+      getSessionDir: () => "/tmp/sessions",
+    };
+    sessionManagerMock.open
+      .mockReturnValueOnce({
+        getLeafId: () => "leaf-1",
+        createBranchedSession: vi.fn(() => "/tmp/sessions/clone.jsonl"),
+      })
+      .mockReturnValueOnce({
+        getSessionId: () => "cloned-session",
+      });
+    const inner = {
+      sessionId: "s1",
+      sessionFile: "/tmp/sessions/source.jsonl",
+      sessionManager: sourceManager,
+      subscribe: vi.fn(() => unsubscribe),
+    };
+    const wrapper = new AgentSessionWrapper(inner as never);
+    wrapper.start();
+
+    await expect(wrapper.send({ type: "clone" })).resolves.toEqual({
+      cancelled: false,
+      newSessionId: "cloned-session",
+    });
+
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(sessionManagerMock.open).toHaveBeenNthCalledWith(1, "/tmp/sessions/source.jsonl", "/tmp/sessions");
+    expect(sessionManagerMock.open).toHaveBeenNthCalledWith(2, "/tmp/sessions/clone.jsonl", "/tmp/sessions");
+    await expect(wrapper.send({ type: "get_session_stats" })).rejects.toThrow("Session is closed");
   });
 });

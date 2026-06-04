@@ -76,6 +76,7 @@ export class AgentSessionWrapper {
   }
 
   async send(command: Record<string, unknown>): Promise<unknown> {
+    if (!this._alive) throw new Error("Session is closed");
     this.resetIdleTimer();
     const type = command.type as string;
 

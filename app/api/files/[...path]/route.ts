@@ -3,7 +3,7 @@ import fs, { readdirSync } from "fs";
 import os from "os";
 import path from "path";
 import { listAllSessions } from "@/lib/session-reader";
-import { canReadFilePath, filePathFromSegments, isPathAllowed, parseByteRange } from "@/lib/file-access";
+import { filePathFromSegments, isPathAllowed, isRealPathAllowed, parseByteRange } from "@/lib/file-access";
 import { getAgentDir } from "@/lib/agent-dir";
 import { requireApiAuth } from "@/lib/api-auth";
 
@@ -220,13 +220,7 @@ export async function GET(
     const type = request.nextUrl.searchParams.get("type") ?? "list";
 
     const allowedRoots = await getAllowedRoots();
-    const isRead = type === "read";
-    const isWatch = type === "watch";
-    if (isRead || isWatch) {
-      if (!canReadFilePath(filePath, allowedRoots)) {
-        return NextResponse.json({ error: "Access denied" }, { status: 403 });
-      }
-    } else if (!isPathAllowed(filePath, allowedRoots)) {
+    if (!isPathAllowed(filePath, allowedRoots)) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
@@ -235,6 +229,9 @@ export async function GET(
       stat = fs.statSync(filePath);
     } catch {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (!isRealPathAllowed(filePath, allowedRoots)) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
     if (type === "read") {

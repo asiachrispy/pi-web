@@ -2,16 +2,6 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { authorizeMiddlewareRequest, getSessionCookie, isRemoteAccessEnabledEnv } from "./lib/middleware-auth";
 
-const PUBLIC_API_PREFIXES = [
-  "/api/remote/pair",
-  "/api/remote/client",
-  "/api/health",
-];
-
-function isPublicApiPath(pathname: string): boolean {
-  return PUBLIC_API_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-}
-
 function isPublicSharePath(pathname: string): boolean {
   return pathname === "/api/share" || pathname.startsWith("/api/share/");
 }
@@ -20,7 +10,13 @@ function isPublicApiRequest(pathname: string, method: string): boolean {
   if (isPublicSharePath(pathname)) {
     return method === "GET" || method === "HEAD" || method === "OPTIONS";
   }
-  return isPublicApiPath(pathname) && (method === "POST" || pathname === "/api/remote/client");
+  if (pathname === "/api/remote/pair") {
+    return method === "POST";
+  }
+  if (pathname === "/api/remote/client" || pathname === "/api/health") {
+    return method === "GET" || method === "HEAD" || method === "OPTIONS";
+  }
+  return false;
 }
 
 function unauthorized(reason: string): NextResponse {

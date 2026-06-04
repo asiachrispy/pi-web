@@ -22,14 +22,9 @@ export function filePathFromSegments(segments: string[]): string {
   return "/" + joined.replace(/^\/+/, "");
 }
 
-/** Read a single file path (local loopback): allowed roots, or any existing regular file. */
+/** Read a single file path only when it stays inside the allowed roots. */
 export function canReadFilePath(target: string, allowedRoots: Set<string>): boolean {
-  if (isPathAllowed(target, allowedRoots)) return true;
-  try {
-    return fs.statSync(target).isFile();
-  } catch {
-    return false;
-  }
+  return isPathAllowed(target, allowedRoots) && isRealPathAllowed(target, allowedRoots);
 }
 
 export function isPathAllowed(target: string, allowedRoots: Set<string>): boolean {
@@ -49,9 +44,29 @@ export function isPathAllowed(target: string, allowedRoots: Set<string>): boolea
   return false;
 }
 
+export function isRealPathAllowed(target: string, allowedRoots: Set<string>): boolean {
+  let realTarget: string;
+  try {
+    realTarget = fs.realpathSync(target);
+  } catch {
+    return false;
+  }
+
+  const realRoots = new Set<string>();
+  for (const root of allowedRoots) {
+    try {
+      realRoots.add(fs.realpathSync(root));
+    } catch {
+      // Ignore stale session cwd entries and other roots that no longer exist.
+    }
+  }
+  return isPathAllowed(realTarget, realRoots);
+}
+
 export function parseByteRange(rangeHeader: string, size: number): ParsedByteRange {
   const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
   if (!match) return { error: "invalid" };
+  if (!match[1] && !match[2]) return { error: "invalid" };
 
   let start = match[1] ? Number(match[1]) : 0;
   let end = match[2] ? Number(match[2]) : size - 1;
@@ -61,7 +76,13 @@ export function parseByteRange(rangeHeader: string, size: number): ParsedByteRan
     end = size - 1;
   }
 
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= size) {
+  if (
+    !Number.isSafeInteger(start)
+    || !Number.isSafeInteger(end)
+    || start < 0
+    || end < start
+    || start >= size
+  ) {
     return { error: "unsatisfiable" };
   }
 
