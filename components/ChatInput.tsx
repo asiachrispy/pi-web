@@ -418,14 +418,18 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput({
   }, []);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    if (!supportsImages) return;
     const items = Array.from(e.clipboardData?.items ?? []);
     const imageItems = items.filter((item) => item.type.startsWith("image/"));
     if (!imageItems.length) return;
     e.preventDefault();
+    if (!supportsImages) {
+      // Surface a transient error so the user knows *why* their paste was dropped.
+      setAttachFileError(t("chatInput.imagesNotSupported"));
+      return;
+    }
     const files = imageItems.map((item) => item.getAsFile()).filter((f): f is File => f !== null);
     processImageFiles(files);
-  }, [processImageFiles, supportsImages]);
+  }, [processImageFiles, supportsImages, t]);
 
 
 

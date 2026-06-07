@@ -1,4 +1,4 @@
-name: Release
+name: Publish to npm
 
 on:
   push:
@@ -6,11 +6,9 @@ on:
       - "v*"
 
 jobs:
-  release:
-    name: Release @agegr/pi-web
+  publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -19,13 +17,10 @@ jobs:
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
-          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
-      # Switch local `file:` deps to registry versions for publishing
-      # (the published tarball can't include the file: paths)
       - name: Switch file: deps to registry versions
         run: |
           sed -i \
@@ -43,7 +38,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Publish to npm
+      - name: Publish
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
