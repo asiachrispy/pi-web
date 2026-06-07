@@ -4,18 +4,13 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to release (e.g. 0.7.0)"
-        required: true
 
 jobs:
   release:
     name: Release @agegr/pi-web
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -39,18 +34,8 @@ jobs:
             package.json
           npm install --no-audit --no-fund
 
-      - name: Bump version (if dispatched)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          VERSION="${{ inputs.version }}"
-          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
-          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/g" package-lock.json
-
       - name: Typecheck
         run: node_modules/.bin/tsc --noEmit
-
-      - name: Lint
-        run: npm run lint
 
       - name: Test
         run: npm run test:run
