@@ -1,4 +1,4 @@
-# pi-web
+# pi-app
 
 [pi 编程智能体](https://github.com/badlogic/pi-mono) 的网页界面。在浏览器中浏览会话、与智能体对话、分叉对话、切换消息分支。
 
@@ -7,14 +7,14 @@
 **无需安装，直接运行：**
 
 ```bash
-npx @agegr/pi-web@latest
+npx pi-app@latest
 ```
 
 **或全局安装后使用：**
 
 ```bash
-npm install -g @agegr/pi-web
-pi-web
+npm install -g pi-app
+pi-app
 ```
 
 启动后打开 [http://localhost:30141](http://localhost:30141)。
@@ -22,15 +22,15 @@ pi-web
 **可选参数：**
 
 ```bash
-pi-web --port 8080               # 自定义端口
-pi-web --hostname 127.0.0.1      # 仅本机访问
-pi-web --remote                  # 开启远程访问并绑定 0.0.0.0
-pi-web -p 8080 -H 127.0.0.1     # 组合使用
+pi-app --port 8080               # 自定义端口
+pi-app --hostname 127.0.0.1      # 仅本机访问
+pi-app --remote                  # 开启远程访问并绑定 0.0.0.0
+pi-app -p 8080 -H 127.0.0.1     # 组合使用
 
-PORT=8080 pi-web                 # 也支持环境变量
+PORT=8080 pi-app                 # 也支持环境变量
 ```
 
-> 安全提示：pi-web 会提供本地会话删除、模型配置和 API key 写入等接口。默认仅绑定 localhost。远程访问需显式开启（`--remote` 或 Settings → Remote access），并通过配对链接或 Bearer token 认证。详见 [docs/remote-access.md](docs/remote-access.md)。
+> 安全提示：pi-app 会提供本地会话删除、模型配置和 API key 写入等接口。默认仅绑定 localhost。远程访问需显式开启（`--remote` 或 Settings → Remote access），并通过配对链接或 Bearer token 认证。详见 [docs/remote-access.md](docs/remote-access.md)。
 
 ## 功能介绍
 
@@ -55,7 +55,7 @@ PORT=8080 pi-web                 # 也支持环境变量
 
 ## 规划
 
-总计划：[docs/plan-pi-web-macos-workbench.md](docs/plan-pi-web-macos-workbench.md)  
+总计划：[docs/plan-pi-web-macos-workbench.md](docs/plan-pi-web-macos-workbench.md)
 贯穿原则：[docs/product-principles.md](docs/product-principles.md)
 
 ## 开发

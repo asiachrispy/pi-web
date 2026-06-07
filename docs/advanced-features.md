@@ -41,7 +41,7 @@ Developer options (hostnames, tunnels, relay) are under **Developer options** at
 
 ## Web Fetch tool
 
-The `web_fetch` tool lets the LLM read any URL as structured JSON-LD (zero-extraction cost for product pages, articles, etc.) or clean Markdown (for plain pages). It's installed as the `pi-web-fetch` extension; once installed, the LLM calls it automatically when given a URL.
+The `web_fetch` tool lets the LLM read any URL as structured JSON-LD (zero-extraction cost for product pages, articles, etc.) or clean Markdown (for plain pages). It's installed as the `pi-fetch-tool` extension; once installed, the LLM calls it automatically when given a URL.
 
 Three tiers run in order of cost:
 

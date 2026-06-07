@@ -34,14 +34,14 @@ Dev reads/writes its own session data directory via `PI_CODING_AGENT_DIR` in the
 "dev": "PI_CODING_AGENT_DIR=~/tmp/pi-dev-agent NEXT_DIST_DIR=.next-dev-30142 next dev -p 30142"
 ```
 
-30141 uses the default `~/.pi/agent/` via `npm start` or the `pi-web` CLI. The env var is honored by `getAgentDir()` in `lib/agent-dir.ts`.
+30141 uses the default `~/.pi/agent/` via `npm start` or the `pi-app` CLI. The env var is honored by `getAgentDir()` in `lib/agent-dir.ts`.
 
 > **Never set `PI_CODING_AGENT_DIR` in `.env.local`** — Next.js loads it for both dev and production, which hides real sessions on 30141.
 
 ### Port isolation
 | Use | Port | Command | Data directory |
 |---|---|---|---|
-| Daily use (stable) | **30141** | `npm start` or `pi-web` | `~/.pi/agent/` |
+| Daily use (stable) | **30141** | `npm start` or `pi-app` | `~/.pi/agent/` |
 | Dev / test (HMR) | **30142** | `npm run dev` | `~/tmp/pi-dev-agent/` |
 
 Do **not** run `next dev` on 30141 while developing on 30142 — both watch the same source tree, so saves will reload 30141 with WIP code. Use `npm start` on 30141 (build first: `npm run build && npm start`).
@@ -56,7 +56,7 @@ All test files that mock localhost must use port **30142**, not 30141. Search fo
 | Directory | Written by | Consumed by |
 |-----------|------------|-------------|
 | `.next-dev-30142` | `npm run dev` | **30142** only |
-| `.next` | `npm run build` (default `NEXT_DIST_DIR`) | **`npm start` / `pi-web` on 30141** |
+| `.next` | `npm run build` (default `NEXT_DIST_DIR`) | **`npm start` / `pi-app` on 30141** |
 | `.next-package` | `npm run package:macos` (`NEXT_DIST_DIR=.next-package`) | **copied into `Pi.app` → `Resources/pi-web/.next`** |
 
 **30142 looking correct does not update 30141 or Pi.app.** After UI/API changes that should reach daily use, always `npm run build` (refreshes `.next`) before `npm start` or packaging.

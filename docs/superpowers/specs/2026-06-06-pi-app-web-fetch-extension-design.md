@@ -1,16 +1,16 @@
-# pi-web `web_fetch` Extension Design
+# pi-app `web_fetch` Extension Design
 
 Date: 2026-06-06
-Project: `pi-web` (provides pi extension)
+Project: `pi-app` (provides pi extension)
 Status: Implemented (P1–P5 complete)
 
 ## Summary
 
 Add a pi extension `web-fetch` that registers an LLM-callable `web_fetch` tool. The tool fetches a URL and returns LLM-friendly content, automatically choosing the cheapest sufficient backend. Built as a standalone npm-packaged extension that installs alongside `agent-browser` (Vercel Labs) as its cross-platform Tier 2 backend, with a native macOS `WKWebView` path (via `piNative`) for Pi.app users.
 
-The extension works in `pi` CLI, `pi-web`, and Pi.app on macOS. Installation is `pi install <repo>`; the LLM gains the tool immediately, and `agent-browser` is auto-installed as an npm dependency.
+The extension works in `pi` CLI, `pi-app`, and Pi.app on macOS. Installation is `pi install pi-fetch-tool`; the LLM gains the tool immediately, and `agent-browser` is auto-installed as an npm dependency.
 
-A new `Web Fetch` section in pi-web Settings exposes:
+A new `Web Fetch` section in pi-app Settings exposes:
 - agent-browser status, version, install button (default-installed state)
 - macOS `WKWebView` availability and toggle (Pi.app only)
 - Default T2 backend preference
@@ -21,10 +21,10 @@ A new `Web Fetch` section in pi-web Settings exposes:
 - Give the LLM a single typed `web_fetch` tool that converts any URL into structured JSON-LD or clean Markdown
 - Minimize token cost: prefer zero-cost structured data extraction (JSON-LD, OpenGraph), then lightweight fetch + Readability, then headless browser as a last resort
 - Minimize latency: parallelize the cheap paths, cache by URL+options hash
-- Work in all three pi runtimes (CLI, pi-web, Pi.app)
+- Work in all three pi runtimes (CLI, pi-app, Pi.app)
 - Make Tier 2 default-installed: `agent-browser` ships as an npm dependency so users get T2 with one `pi install`
 - Use macOS native `WKWebView` (via `piNative`) as the preferred T2 on Pi.app, falling back to `agent-browser` when unavailable or disabled
-- Surface T2 configuration in pi-web Settings — agent-browser status, WKWebView toggle, default backend, cache TTL — so users can manage the tool from the UI without touching the terminal
+- Surface T2 configuration in pi-app Settings — agent-browser status, WKWebView toggle, default backend, cache TTL — so users can manage the tool from the UI without touching the terminal
 
 ## Non-Goals
 
@@ -79,7 +79,7 @@ A new `Web Fetch` section in pi-web Settings exposes:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  pi-web  (project side, P3 + P4)                            │
+│  pi-app  (project side, P3 + P4)                            │
 │                                                             │
 │  ┌────────────────────────────┐                             │
 │  │  app/api/web-fetch/        │                             │
@@ -126,10 +126,10 @@ If T0 succeeds, the LLM gets structured JSON it can answer questions about witho
 ### Cache
 
 - In-memory `Map<string, { result, expiresAt }>`, keyed by `sha256(url + JSON.stringify(sortedOptions)).slice(0, 16)`
-- TTL: 1 hour (configurable via `~/.pi/agent/settings.json` under `webFetch.cacheTtlMs`, exposed in pi-web Settings)
+- TTL: 1 hour (configurable via `~/.pi/agent/settings.json` under `webFetch.cacheTtlMs`, exposed in pi-app Settings)
 - Cache lookup runs before any tier; cache miss stores the final formatted result
 - Caching is per-process; no disk persistence in v1
-- "Clear cache" button in pi-web Settings → calls `cache.clear()` in the running extension
+- "Clear cache" button in pi-app Settings → calls `cache.clear()` in the running extension
 
 ### Platform-Aware Tier 2
 
@@ -139,7 +139,7 @@ T2 chooses the backend at runtime based on platform and user preference:
 2. Else if `webFetch.t2Backend` is `"agent-browser"` OR `agent-browser` is on `$PATH` → use **agent-browser** (`backends/agent-browser.ts`)
 3. Else if `webFetch.t2Backend == "auto"` AND none of the above → return error hinting at install
 
-The preference is read from `~/.pi/agent/settings.json` under `webFetch.t2Backend` (`"auto" | "webkit" | "agent-browser"`, default `"auto"`) and mirrored in the pi-web Settings UI.
+The preference is read from `~/.pi/agent/settings.json` under `webFetch.t2Backend` (`"auto" | "webkit" | "agent-browser"`, default `"auto"`) and mirrored in the pi-app Settings UI.
 
 ### Output Format
 
@@ -185,7 +185,7 @@ The LLM sees error details in the result and can decide to retry with different 
 
 ```json
 {
-  "name": "pi-web-fetch",
+  "name": "pi-fetch-tool",
   "version": "0.1.0",
   "type": "module",
   "main": "src/index.ts",
@@ -283,11 +283,11 @@ interface PiNativeBridge {
 
 ### `src/preferences.ts`
 
-Exports `getPreferences(): { t2Backend: "auto" | "webkit" | "agent-browser"; cacheTtlMs: number }`. Reads from `~/.pi/agent/settings.json` (`webFetch.t2Backend`, `webFetch.cacheTtlMs`) with defaults. Caches result per-process; re-reads on each call so changes in pi-web Settings take effect without restart.
+Exports `getPreferences(): { t2Backend: "auto" | "webkit" | "agent-browser"; cacheTtlMs: number }`. Reads from `~/.pi/agent/settings.json` (`webFetch.t2Backend`, `webFetch.cacheTtlMs`) with defaults. Caches result per-process; re-reads on each call so changes in pi-app Settings take effect without restart.
 
-## pi-web Settings Integration (project-side changes)
+## pi-app Settings Integration (project-side changes)
 
-This is the only section that adds files to the `pi-web` repo. All other phases are pure extension changes.
+This is the only section that adds files to the `pi-app` repo. All other phases are pure extension changes.
 
 ### `app/api/web-fetch/status/route.ts`
 
@@ -460,12 +460,12 @@ LLM receives the formatted JSON, sees the `type` and `source` fields, and uses t
 
 ## Distribution
 
-The extension ships as a separate npm package (e.g., `pi-web-fetch`), distributable via:
+The extension ships as a separate npm package (e.g., `pi-fetch-tool`), distributable via:
 
 ```bash
-pi install github.com/<owner>/pi-web-fetch
+pi install github.com/<owner>/pi-fetch-tool
 # or
-pi install npm:pi-web-fetch
+pi install npm:pi-fetch-tool
 ```
 
 The package's `pi.extensions` field in `package.json` points to `src/index.ts`. After `npm install`, `pi` discovers the extension on next session start.
@@ -480,11 +480,11 @@ In v1 we host in a separate repo. Once stable, publish to npm with `pi-package` 
 | **P2** | ✅ Done | agent-browser subprocess (text-tree snapshot parser), real-URL smoke tests gated by `RUN_SMOKE=1` |
 | **P3** | ✅ Done | `/api/web-fetch/{status,preferences,install-agent-browser}` routes + `WebFetchSettings.tsx` component in Settings drawer |
 | **P4** | ✅ Done | `HiddenWebFetcher` Swift class + `piNative.webFetch` IPC + extension `backends/webkit.ts` |
-| **P5** | ✅ Done | pi-web `docs/advanced-features.md` section + extension CI workflow (`.github/workflows/ci.yml`) + `.npmignore` for publishing |
+| **P5** | ✅ Done | pi-app `docs/advanced-features.md` section + extension CI workflow (`.github/workflows/ci.yml`) + `.npmignore` for publishing |
 
 ## Testing Strategy
 
-### Extension unit tests (`pi-web-fetch/tests/`)
+### Extension unit tests (`pi-fetch-tool/tests/`)
 
 - `extractors/jsonld.test.ts` — fixture HTML with single JSON-LD, array JSON-LD, OpenGraph, microdata; verify correct extraction and `null` for invalid
 - `extractors/selector.test.ts` — verify cheerio-based selector extraction, edge cases (no match, multiple matches, nested)
@@ -503,13 +503,13 @@ In v1 we host in a separate repo. Once stable, publish to npm with `pi-package` 
 - `tests/integration.test.ts` — fixed HTML fixtures, end-to-end through router, assert final `WebFetchResult` shape
 - Marked `integration: true` in test config so unit-test run skips them
 
-### pi-web HTTP API tests (project side, P3)
+### pi-app HTTP API tests (project side, P3)
 
 - `app/api/web-fetch/status/route.test.ts` — mocked child_process, mocked piNative; verify response shape
 - `app/api/web-fetch/preferences/route.test.ts` — GET returns current, PUT merges into settings.json
 - `app/api/web-fetch/install-agent-browser/route.test.ts` — mocked spawn; verify SSE stream format
 
-### pi-web Settings UI tests (P3)
+### pi-app Settings UI tests (P3)
 
 - `components/Settings/WebFetchSettings.test.tsx` — render each state (installed/missing, macOS/other), test preference change calls PUT, test install button triggers POST and shows progress
 
@@ -519,14 +519,14 @@ In v1 we host in a separate repo. Once stable, publish to npm with `pi-package` 
 
 ### Smoke tests (manual, gated)
 
-- `pi-web-fetch/tests/smoke.test.ts` — real network fetches; gated behind `RUN_SMOKE=1`; verifies agent-browser and WKWebView against known sites
+- `pi-fetch-tool/tests/smoke.test.ts` — real network fetches; gated behind `RUN_SMOKE=1`; verifies agent-browser and WKWebView against known sites
 - Not run in CI
 
 ### Coverage targets
 
 - Extension `src/`: ≥ 80% line coverage
 - Extension `src/extractors/jsonld.ts` and `src/formatter.ts`: 100% (small, critical)
-- pi-web new code: ≥ 80% line coverage
+- pi-app new code: ≥ 80% line coverage
 - Swift code: best-effort, smoke-tested manually
 
 ## Risks and Open Questions
@@ -548,6 +548,6 @@ In v1 we host in a separate repo. Once stable, publish to npm with `pi-package` 
 - pi extension docs: <https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/extensions.md>
 - pi `registerTool` signature: same docs, "Custom Tools" section
 - Mozilla Readability: <https://github.com/mozilla/readability>
-- pi-web macOS shell contract: `docs/macos-shell-contract.md`
+- pi-app macOS shell contract: `docs/macos-shell-contract.md`
 - piNative types: `lib/pi-native.d.ts`
 - Pi.app Swift sources: `macos/PiWorkbench/Sources/PiWorkbench/`

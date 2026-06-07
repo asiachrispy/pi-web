@@ -1,0 +1,39 @@
+name: Swift build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & test PiWorkbench (Swift)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+        # Adjust path above to match the runner's installed Xcode; on macos-14 the
+        # default toolchain is Xcode 15.x. Override here if a different version is required.
+
+      - name: Build PiWorkbench
+        working-directory: macos/PiWorkbench
+        run: swift build
+
+      - name: Run Swift tests
+        working-directory: macos/PiWorkbench
+        run: swift test
+
+      - name: Typecheck TypeScript
+        run: node_modules/.bin/tsc --noEmit
+
+      - name: Run Vitest
+        run: npm run test:run
+
+      - name: Build Next.js
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
