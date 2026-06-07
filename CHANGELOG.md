@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0] - 2026-06-07
+
+### Changed
+- **Package renamed**: `@agegr/pi-web` → `pi-app` (npm). The `@agegr` scope belonged to another user; we couldn't publish there. Now published under the `livos` npm user.
+- **GitHub repo renamed**: `asiachrispy/pi-web` → `asiachrispy/pi-app`. Internal Swift paths unchanged (`Pi.app/Contents/Resources/pi-web/...`) because that's a runtime path inside the .app bundle.
+- **CLI binary renamed**: `pi-web` → `pi-app`. Update shell aliases / service units if you used the old name.
+- **Documentation sync**: `AGENTS.md`, `README.md`, `docs/advanced-features.md`, and the web-fetch spec (`docs/superpowers/specs/2026-06-06-...`) updated to use the new names. Historical references in old CHANGELOG entries are preserved verbatim.
+
+### Added
+- **CI publish workflow**: `.github/workflows/publish-npm.yml` (simpler than the old `release.yml` — no `file:`-dep hack needed because pi-app no longer uses local monorepo paths).
+- **Swift CI**: `.github/workflows/swift-build.yml` builds and tests the macOS Swift code (`HiddenWebFetcher`, `PiNativeBridge`) on `macos-14`, in addition to the Node/Next build.
+- **Issue templates**: `bug_report.md`, `feature_request.md`, `web_fetch_feedback.md` for triaging T0/T1/T2 issues.
+
 ## [Unreleased]
 
 ### Added
