@@ -33,7 +33,8 @@
     "relay:server": "node --experimental-strip-types scripts/pi-relay-server.ts",
     "relay:host": "node --experimental-strip-types scripts/pi-relay-host.ts",
     "relay:client": "node --experimental-strip-types scripts/pi-relay-client.ts",
-    "release": "npm version patch --no-git-tag-version && npm run build && npm publish --access public"
+    "release": "npm version patch --no-git-tag-version && npm run build && npm publish --access public",
+    "prepublishOnly": "node_modules/.bin/tsc --noEmit && node_modules/.bin/vitest run"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "file:../pi/packages/ai",
