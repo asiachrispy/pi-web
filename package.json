@@ -67,7 +67,7 @@
     "vitest": "^4.1.7"
   },
   "optionalDependencies": {
-    "pi-web-fetch": "^0.1.0"
+    "@asiachrispy/pi-web-fetch": "^0.1.0"
   },
   "overrides": {
     "js-cookie": "3.0.8",
