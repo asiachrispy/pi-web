@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.7.0)"
+        required: true
+
+jobs:
+  release:
+    name: Release @agegr/pi-web
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Switch local `file:` deps to registry versions for publishing
+      # (the published tarball can't include the file: paths)
+      - name: Switch file: deps to registry versions
+        run: |
+          sed -i '' \
+            -e 's|"@earendil-works/pi-ai": "file:.*"|"@earendil-works/pi-ai": "^0.78.0"|' \
+            -e 's|"@earendil-works/pi-coding-agent": "file:.*"|"@earendil-works/pi-coding-agent": "^0.78.0"|' \
+            package.json
+          npm install --no-audit --no-fund
+
+      - name: Bump version (if dispatched)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          VERSION="${{ inputs.version }}"
+          sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
+          sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/g" package-lock.json
+
+      - name: Typecheck
+        run: node_modules/.bin/tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test:run
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
