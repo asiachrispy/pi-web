@@ -56,7 +56,7 @@ Manage Tier 2 backend, cache TTL, and agent-browser installation under **Setting
 Install:
 
 ```bash
-pi install @asiachrispy/pi-web-fetch
+pi install pi-fetch-tool
 ```
 
 Default installation includes `agent-browser` (~5 MB binary). The first `agent-browser install` run downloads Chrome (~150 MB, one-time).
