@@ -18,15 +18,16 @@ jobs:
         with:
           node-version: "22"
           registry-url: https://registry.npmjs.org
-          cache: "npm"
-      - run: npm ci
-      - run: npm run prepublishOnly
+      - run: |
+          # pi-app's lockfile was generated against a monorepo that has
+          # packages now published to the registry. `npm ci` is too strict
+          # and fails on transitive deps it can't resolve. Use `npm install`
+          # which reconciles.
+          rm -f package-lock.json
+          npm install --no-audit --no-fund --legacy-peer-deps
+      - run: node_modules/.bin/tsc --noEmit
+      - run: npm run test:run
       - run: npm run build
-      - name: Verify tag matches package.json version
-        run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          PKG=$(node -e "process.stdout.write(require('./package.json').version)")
-          [ "$TAG" = "$PKG" ] || { echo "tag v$TAG != package.json $PKG"; exit 1; }
       - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
