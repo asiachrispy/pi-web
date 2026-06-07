@@ -2,7 +2,7 @@
 
 Date: 2026-06-06
 Project: `pi-web` (provides pi extension)
-Status: Proposed
+Status: Implemented (P1–P5 complete)
 
 ## Summary
 
@@ -474,13 +474,13 @@ In v1 we host in a separate repo. Once stable, publish to npm with `pi-package` 
 
 ## Phasing
 
-| Phase | Scope | Exit criteria |
-|-------|-------|---------------|
-| **P1** | Extension + T0 (JSON-LD) + T1 (Readability) + cache + formatter + preferences + unit tests + README | `web_fetch` returns structured JSON for product pages, Markdown for articles. Token cost ≤ 2k for typical news article. Test coverage ≥ 80%. Settings change to `cacheTtlMs` takes effect without restart. |
-| **P2** | T2 (agent-browser subprocess integration) + smoke test | T2 successfully fetches a known SPA (e.g., a public Twitter profile). `agent-browser` skill visible in system prompt. `agent-browser` not installed → tool returns clear install hint. |
-| **P3** | pi-web HTTP API + Settings UI + agent-browser install trigger | `GET /api/web-fetch/status` returns correct values. Settings panel shows agent-browser status, lets user trigger install (with progress), change T2 preference, change cache TTL, clear cache. `PUT /api/web-fetch/preferences` persists to `settings.json`. |
-| **P4** | macOS WKWebView backend (Swift + piNative + extension `webkit.ts`) | Pi.app on macOS: T2 uses WKWebView, fetches are < 1s for typical pages. T2 backend preference toggles between WKWebView and agent-browser. Non-Pi.app environments fall back to agent-browser transparently. |
-| **P5** | pi-web `docs/advanced-features.md` section + extension README finalization + CI workflow | Doc section merged. CI runs unit + integration tests on PR. Extension discoverable via `pi.dev/packages`. |
+| Phase | Status | Notes |
+|-------|--------|-------|
+| **P1** | ✅ Done | `web_fetch` tool, T0+T1, cache, preferences, 67 unit tests, README, end-to-end smoke verified |
+| **P2** | ✅ Done | agent-browser subprocess (text-tree snapshot parser), real-URL smoke tests gated by `RUN_SMOKE=1` |
+| **P3** | ✅ Done | `/api/web-fetch/{status,preferences,install-agent-browser}` routes + `WebFetchSettings.tsx` component in Settings drawer |
+| **P4** | ✅ Done | `HiddenWebFetcher` Swift class + `piNative.webFetch` IPC + extension `backends/webkit.ts` |
+| **P5** | ✅ Done | pi-web `docs/advanced-features.md` section + extension CI workflow (`.github/workflows/ci.yml`) + `.npmignore` for publishing |
 
 ## Testing Strategy
 

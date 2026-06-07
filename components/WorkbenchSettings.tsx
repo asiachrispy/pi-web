@@ -7,6 +7,7 @@ import { RemoteAccessSettings } from "./RemoteAccessSettings";
 import { UsageActivityChart } from "./UsageActivityChart";
 import { ExtensionsSettings } from "./ExtensionsSettings";
 import { ScenePackControls } from "./ScenePackControls";
+import { WebFetchSettings } from "./WebFetchSettings";
 
 interface Props {
   onOpenModels: () => void;
@@ -102,6 +103,7 @@ export function WorkbenchSettings({
         </section>
 
         <ExtensionsSettings />
+        <WebFetchSettings />
         <ScenePackControls />
 
         <section className="mt-6">

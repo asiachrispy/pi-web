@@ -4,6 +4,7 @@ import WebKit
 
 final class PiNativeBridge: NSObject, WKScriptMessageHandler {
   weak var webView: WKWebView?
+  private let hiddenFetcher = HiddenWebFetcher()
 
   static let injectionScript = """
   (function() {
@@ -31,6 +32,7 @@ final class PiNativeBridge: NSObject, WKScriptMessageHandler {
       showNotification: (input) => { call("showNotification", input); },
       openPath: (path) => call("openPath", { path }),
       restartServer: () => call("restartServer"),
+      webFetch: (url, options) => call("webFetch", { url, options: options || {} }),
     };
   })();
   """
@@ -72,8 +74,34 @@ final class PiNativeBridge: NSObject, WKScriptMessageHandler {
     case "restartServer":
       await ServerManager.shared.restart()
       return nil
+    case "webFetch":
+      return try await webFetch(args: args)
     default:
       throw NSError(domain: "piNative", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unknown method \(method)"])
+    }
+  }
+
+  @MainActor
+  private func webFetch(args: [String: Any]) async throws -> Any? {
+    guard let urlString = args["url"] as? String, let url = URL(string: urlString) else {
+      throw NSError(domain: "piNative", code: 10, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
+    }
+    let optionsDict = (args["options"] as? [String: Any]) ?? [:]
+    let waitUntil = (optionsDict["waitUntil"] as? String) ?? "networkidle"
+    let timeoutMs = (optionsDict["timeoutMs"] as? Int) ?? 15_000
+    let options = HiddenWebFetcher.WebFetchOptions(waitUntil: waitUntil, timeoutMs: timeoutMs)
+    do {
+      let result = try await hiddenFetcher.fetch(url: url, options: options)
+      return [
+        "markdown": result.markdown,
+        "length": result.length,
+        "title": result.title,
+        "finalUrl": result.finalUrl,
+      ]
+    } catch {
+      // Return null to signal "not available" rather than throwing — the
+      // extension will fall back to agent-browser.
+      return nil
     }
   }
 
