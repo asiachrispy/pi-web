@@ -31,6 +31,8 @@ jobs:
         run: |
           sed -i -E 's|"@earendil-works/pi-ai": "file:[^"]*"|"@earendil-works/pi-ai": "^0.78.0"|' package.json
           sed -i -E 's|"@earendil-works/pi-coding-agent": "file:[^"]*"|"@earendil-works/pi-coding-agent": "^0.78.0"|' package.json
+          # Replace the $postcss self-reference with the actual version (8.5.15)
+          sed -i -E 's|"postcss": "\$postcss"|"postcss": "8.5.15"|' package.json
           rm -f package-lock.json
           npm install --no-audit --no-fund
 
