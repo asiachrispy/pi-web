@@ -60,3 +60,33 @@ export function isSystemTempCwd(cwd: string): boolean {
 export function getPickerCwds(sessions: SessionProjectInfo[]): string[] {
   return getProjectCwds(sessions).filter((cwd) => !isSystemTempCwd(cwd));
 }
+
+/**
+ * Return the most recently modified session for a given cwd, or null.
+ *
+ * Used by the sidebar to auto-open the latest session when the user picks
+ * a project from the dropdown. Ties on `modified` are broken by descending
+ * session id (lexicographic) so the result is deterministic.
+ *
+ * Sessions with missing or empty `cwd` / `modified` are treated as
+ * non-candidates and never throw.
+ */
+export function pickMostRecentSession<T extends Pick<SessionInfo, "cwd" | "modified" | "id">>(
+  sessions: T[],
+  cwd: string | null,
+): T | null {
+  if (!cwd) return null;
+  let best: T | null = null;
+  for (const s of sessions) {
+    if (!s || !s.cwd || !s.modified) continue;
+    if (s.cwd !== cwd) continue;
+    if (
+      !best ||
+      s.modified > best.modified ||
+      (s.modified === best.modified && s.id > best.id)
+    ) {
+      best = s;
+    }
+  }
+  return best;
+}

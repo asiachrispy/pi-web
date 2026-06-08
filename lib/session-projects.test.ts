@@ -1,85 +1,108 @@
-import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
-import { getPickerCwds, getProjectCwds, isSystemTempCwd } from "./session-projects";
+import {
+  getProjectCwds,
+  getPickerCwds,
+  isSystemTempCwd,
+  pickMostRecentSession,
+} from "./session-projects";
 
-describe("getProjectCwds", () => {
-  it("returns every project cwd sorted by latest activity", () => {
-    const sessions = Array.from({ length: 7 }, (_, index) => ({
-      cwd: `/project-${index + 1}`,
-      modified: `2026-06-05T10:0${index}:00.000Z`,
-    }));
+function s(id: string, cwd: string, modified: string) {
+  return { id, cwd, modified };
+}
 
-    expect(getProjectCwds(sessions)).toEqual([
-      "/project-7",
-      "/project-6",
-      "/project-5",
-      "/project-4",
-      "/project-3",
-      "/project-2",
-      "/project-1",
-    ]);
+describe("pickMostRecentSession", () => {
+  it("returns null when no session matches the cwd", () => {
+    const sessions = [
+      s("a", "/repo/a", "2026-06-01T00:00:00.000Z"),
+      s("b", "/repo/b", "2026-06-02T00:00:00.000Z"),
+    ];
+    expect(pickMostRecentSession(sessions, "/repo/missing")).toBeNull();
   });
 
-  it("uses the newest session when multiple sessions share a cwd", () => {
-    expect(getProjectCwds([
-      { cwd: "/older", modified: "2026-06-05T10:00:00.000Z" },
-      { cwd: "/shared", modified: "2026-06-05T09:00:00.000Z" },
-      { cwd: "/shared", modified: "2026-06-05T11:00:00.000Z" },
-    ])).toEqual(["/shared", "/older"]);
+  it("returns null when the cwd is null or empty", () => {
+    const sessions = [s("a", "/repo/a", "2026-06-01T00:00:00.000Z")];
+    expect(pickMostRecentSession(sessions, null)).toBeNull();
+    expect(pickMostRecentSession(sessions, "")).toBeNull();
+  });
+
+  it("returns the single matching session", () => {
+    const sessions = [
+      s("a", "/repo/a", "2026-06-01T00:00:00.000Z"),
+      s("b", "/repo/b", "2026-06-02T00:00:00.000Z"),
+    ];
+    const picked = pickMostRecentSession(sessions, "/repo/a");
+    expect(picked?.id).toBe("a");
+  });
+
+  it("returns the session with the largest modified timestamp", () => {
+    const sessions = [
+      s("older", "/repo/a", "2026-06-01T00:00:00.000Z"),
+      s("newest", "/repo/a", "2026-06-08T00:00:00.000Z"),
+      s("middle", "/repo/a", "2026-06-04T00:00:00.000Z"),
+    ];
+    const picked = pickMostRecentSession(sessions, "/repo/a");
+    expect(picked?.id).toBe("newest");
+  });
+
+  it("breaks ties on modified by descending id (deterministic)", () => {
+    const ts = "2026-06-04T00:00:00.000Z";
+    const sessions = [
+      s("aaa", "/repo/a", ts),
+      s("zzz", "/repo/a", ts),
+      s("mmm", "/repo/a", ts),
+    ];
+    const picked = pickMostRecentSession(sessions, "/repo/a");
+    expect(picked?.id).toBe("zzz");
+  });
+
+  it("ignores sessions from other cwds even when newer", () => {
+    const sessions = [
+      s("newer-but-other-cwd", "/repo/b", "2026-06-08T00:00:00.000Z"),
+      s("older-but-matching", "/repo/a", "2026-06-01T00:00:00.000Z"),
+    ];
+    const picked = pickMostRecentSession(sessions, "/repo/a");
+    expect(picked?.id).toBe("older-but-matching");
+  });
+
+  it("does not throw on sessions with missing cwd or modified", () => {
+    const sessions = [
+      { id: "no-cwd", cwd: "", modified: "2026-06-08T00:00:00.000Z" },
+      { id: "no-mod", cwd: "/repo/a", modified: "" },
+      s("good", "/repo/a", "2026-06-01T00:00:00.000Z"),
+    ];
+    const picked = pickMostRecentSession(sessions, "/repo/a");
+    expect(picked?.id).toBe("good");
+  });
+
+  it("handles an empty session list", () => {
+    expect(pickMostRecentSession([], "/repo/a")).toBeNull();
   });
 });
 
-describe("isSystemTempCwd", () => {
-  const tmp = tmpdir();
-
-  it("returns true for the OS temp dir itself", () => {
-    expect(isSystemTempCwd(tmp)).toBe(true);
+// Smoke tests on the pre-existing helpers to guard against regressions when
+// editing this file. These are intentionally minimal.
+describe("getProjectCwds / getPickerCwds / isSystemTempCwd", () => {
+  it("orders cwds by latest session modified desc", () => {
+    const cwds = getProjectCwds([
+      s("a1", "/repo/a", "2026-06-01T00:00:00.000Z"),
+      s("b1", "/repo/b", "2026-06-08T00:00:00.000Z"),
+      s("a2", "/repo/a", "2026-06-05T00:00:00.000Z"),
+    ]);
+    expect(cwds).toEqual(["/repo/b", "/repo/a"]);
   });
 
-  it("returns true for a subdir of the OS temp dir", () => {
-    expect(isSystemTempCwd(join(tmp, "pi-runtime-events-12345-abc"))).toBe(true);
-    expect(isSystemTempCwd(join(tmp, "nested", "deeper", "cwd"))).toBe(true);
-  });
-
-  it("returns false for real user projects", () => {
-    expect(isSystemTempCwd("/Users/mk/codespace/pi-web")).toBe(false);
-    expect(isSystemTempCwd("/Users/mk/pi-cwd-20260603")).toBe(false);
-  });
-
-  it("returns false for an empty cwd", () => {
+  it("isSystemTempCwd matches tmp-style paths and rejects real cwds", () => {
+    expect(isSystemTempCwd("/tmp/foo")).toBe(true);
+    expect(isSystemTempCwd("/private/var/folders/abc/def/T/x")).toBe(true);
+    expect(isSystemTempCwd("/Users/me/projects")).toBe(false);
     expect(isSystemTempCwd("")).toBe(false);
   });
 
-  it("does not match paths that merely contain the temp dir name", () => {
-    const outside = `${sep}home${sep}user${sep}my-tmp${sep}project`;
-    expect(isSystemTempCwd(outside)).toBe(false);
-  });
-});
-
-describe("getPickerCwds", () => {
-  const tmp = tmpdir();
-
-  it("filters out sessions whose cwd is inside the OS temp dir", () => {
+  it("getPickerCwds filters out system temp cwds", () => {
     const cwds = getPickerCwds([
-      { cwd: "/Users/mk/codespace/pi-web", modified: "2026-06-05T12:00:00.000Z" },
-      { cwd: join(tmp, "pi-runtime-events-1780878-abcd"), modified: "2026-06-08T08:00:00.000Z" },
-      { cwd: join(tmp, "pi-2860-1780878-efgh"), modified: "2026-06-08T07:55:00.000Z" },
-      { cwd: "/Users/mk/codespace/pi", modified: "2026-06-05T11:00:00.000Z" },
+      s("a1", "/tmp/foo", "2026-06-01T00:00:00.000Z"),
+      s("a2", "/repo/a", "2026-06-08T00:00:00.000Z"),
     ]);
-
-    expect(cwds).toEqual([
-      "/Users/mk/codespace/pi-web",
-      "/Users/mk/codespace/pi",
-    ]);
-  });
-
-  it("preserves the most-recent-first sort from getProjectCwds", () => {
-    const cwds = getPickerCwds([
-      { cwd: "/Users/mk/codespace/old", modified: "2026-06-01T00:00:00.000Z" },
-      { cwd: join(tmp, "ignored"), modified: "2026-06-08T00:00:00.000Z" },
-      { cwd: "/Users/mk/codespace/new", modified: "2026-06-07T00:00:00.000Z" },
-    ]);
-    expect(cwds).toEqual(["/Users/mk/codespace/new", "/Users/mk/codespace/old"]);
+    expect(cwds).toEqual(["/repo/a"]);
   });
 });

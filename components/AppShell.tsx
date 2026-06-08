@@ -37,6 +37,11 @@ export function AppShell() {
   const { isDark, toggleTheme } = useTheme();
   const { t: i18nT } = useI18n();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
+  // Mirror selectedSession into a ref so handleCwdChange can see the
+  // latest value without depending on it (re-creating the callback would
+  // cascade into the sidebar).
+  const selectedSessionRef = useRef<SessionInfo | null>(selectedSession);
+  selectedSessionRef.current = selectedSession;
   // When user clicks +, we only store the cwd — no fake session id
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -209,6 +214,16 @@ export function AppShell() {
       if (prev && prev !== cwd) return null;
       return prev;
     });
+    // If a session is already selected for the new cwd (e.g. the sidebar
+    // dropdown just auto-opened the most recent session for this project),
+    // keep the chat view — handleSelectSession already did the work of
+    // setting workbenchView, sessionKey, and the ?session= URL.
+    if (selectedSessionRef.current && selectedSessionRef.current.cwd === cwd) {
+      // Still refresh the sidebar list so a brand-new cwd / custom path
+      // reflects pre-existing sessions immediately.
+      setRefreshKey((k) => k + 1);
+      return;
+    }
     setWorkbenchView("home");
     setSessionKey((k) => k + 1);
     // Re-fetch the session list so a brand-new cwd (default dir / custom path

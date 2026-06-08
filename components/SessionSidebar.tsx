@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useI18n } from "@/lib/i18n/provider";
 import { fetchWithTimeout, isConnectionError } from "@/lib/api-fetch";
-import { getPickerCwds } from "@/lib/session-projects";
+import { getPickerCwds, pickMostRecentSession } from "@/lib/session-projects";
 import type { SessionInfo } from "@/lib/types";
 import { FileExplorer } from "./FileExplorer";
 
@@ -609,6 +609,16 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
                 <button
                   key={cwd}
                   onClick={() => {
+                    const isProjectSwitch = cwd !== filterCwd;
+                    if (isProjectSwitch) {
+                      const mostRecent = pickMostRecentSession(allSessions, cwd);
+                      if (mostRecent) {
+                        // Auto-open the most recent session for this project.
+                        // handleCwdChange will then see the matching selectedSession
+                        // and skip its reset-to-home step.
+                        onSelectSession(mostRecent);
+                      }
+                    }
                     setSelectedCwd(cwd);
                     setCustomPathOpen(false);
                     setCustomPathValue("");
