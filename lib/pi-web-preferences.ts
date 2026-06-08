@@ -10,6 +10,9 @@ export interface PiWebPreferences {
   notificationsEnabled?: boolean;
   /** When true, in-session branch switches call navigate_tree with summarize (default off). */
   branchSummarizeBeforeSwitch?: boolean;
+  /** When true, macOS Pi.app holds a system idle-sleep-preventing power
+   *  assertion for the whole app session (not just while a task is running). */
+  keepAwakeAlways?: boolean;
 }
 
 export const PI_WEB_PREFERENCES_FILENAME = "pi-web-preferences.json";

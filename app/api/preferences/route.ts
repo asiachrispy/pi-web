@@ -29,6 +29,9 @@ function sanitizePatch(body: unknown): Partial<PiWebPreferences> {
   if (typeof input.branchSummarizeBeforeSwitch === "boolean") {
     patch.branchSummarizeBeforeSwitch = input.branchSummarizeBeforeSwitch;
   }
+  if (typeof input.keepAwakeAlways === "boolean") {
+    patch.keepAwakeAlways = input.keepAwakeAlways;
+  }
 
   return patch;
 }

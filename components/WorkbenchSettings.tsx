@@ -8,6 +8,7 @@ import { UsageActivityChart } from "./UsageActivityChart";
 import { ExtensionsSettings } from "./ExtensionsSettings";
 import { ScenePackControls } from "./ScenePackControls";
 import { WebFetchSettings } from "./WebFetchSettings";
+import { PowerManagementSettings } from "./PowerManagementSettings";
 
 interface Props {
   onOpenModels: () => void;
@@ -105,6 +106,8 @@ export function WorkbenchSettings({
         <ExtensionsSettings />
         <WebFetchSettings />
         <ScenePackControls />
+
+        <PowerManagementSettings />
 
         <RemoteAccessSettings />
       </div>

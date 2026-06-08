@@ -33,6 +33,10 @@ final class PiNativeBridge: NSObject, WKScriptMessageHandler {
       openPath: (path) => call("openPath", { path }),
       restartServer: () => call("restartServer"),
       webFetch: (url, options) => call("webFetch", { url, options: options || {} }),
+      preventSleep: () => call("preventSleep"),
+      allowSleep: () => call("allowSleep"),
+      setKeepAwakeAlways: (enabled) => call("setKeepAwakeAlways", { enabled: !!enabled }),
+      getPowerState: () => call("getPowerState"),
     };
   })();
   """
@@ -76,6 +80,26 @@ final class PiNativeBridge: NSObject, WKScriptMessageHandler {
       return nil
     case "webFetch":
       return try await webFetch(args: args)
+    case "preventSleep":
+      PowerAssertionManager.shared.acquire(mode: .autoTask)
+      return nil
+    case "allowSleep":
+      PowerAssertionManager.shared.release(currentMode: .none)
+      return nil
+    case "setKeepAwakeAlways":
+      let enabled = args["enabled"] as? Bool ?? false
+      if enabled {
+        PowerAssertionManager.shared.acquire(mode: .alwaysOn)
+      } else {
+        PowerAssertionManager.shared.forceRelease()
+      }
+      return nil
+    case "getPowerState":
+      let mgr = PowerAssertionManager.shared
+      return [
+        "isHeld": mgr.isHeld,
+        "mode": mgr.mode == .autoTask ? "autoTask" : (mgr.mode == .alwaysOn ? "alwaysOn" : "none"),
+      ]
     default:
       throw NSError(domain: "piNative", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unknown method \(method)"])
     }

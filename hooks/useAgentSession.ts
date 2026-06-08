@@ -280,6 +280,59 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
     agentRunningRef.current = agentRunning;
   }, [agentRunning]);
 
+  // macOS Pi.app: keep the system from idle-sleeping while a task is in flight.
+  // Acquires a power assertion on any of {isStreaming, agentRunning, isCompacting}
+  // going false->true, and releases (with a short debounce) on all three going
+  // true->false. The assertion is held on the Swift side; web just signals intent.
+  const prevTaskActiveRef = useRef<boolean | null>(null);
+  const releaseSleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const isTaskActive = streamState.isStreaming || agentRunning || isCompacting;
+    const bridge = typeof window !== "undefined" ? window.piNative : undefined;
+
+    if (releaseSleepTimerRef.current) {
+      clearTimeout(releaseSleepTimerRef.current);
+      releaseSleepTimerRef.current = null;
+    }
+
+    if (prevTaskActiveRef.current === null) {
+      // First observation: just record initial state, do not call into the
+      // bridge. On a page reload mid-task the SSE reconnect will set the
+      // real state shortly and we'll acquire then.
+      prevTaskActiveRef.current = isTaskActive;
+      return;
+    }
+
+    if (isTaskActive && prevTaskActiveRef.current === false) {
+      bridge?.preventSleep?.();
+      prevTaskActiveRef.current = true;
+      return;
+    }
+    if (!isTaskActive && prevTaskActiveRef.current === true) {
+      // Debounce: if a tool-call -> next-stream is happening in tight
+      // succession, the gap should not release the assertion.
+      releaseSleepTimerRef.current = setTimeout(() => {
+        bridge?.allowSleep?.();
+        prevTaskActiveRef.current = false;
+        releaseSleepTimerRef.current = null;
+      }, 500);
+    }
+  }, [streamState.isStreaming, agentRunning, isCompacting]);
+
+  useEffect(() => {
+    return () => {
+      // Defensive: if the component unmounts mid-task, release the
+      // auto-task power assertion so we don't pin the system awake after
+      // the user navigates away. The Swift side ignores this when the
+      // "keep awake always" preference is on.
+      if (releaseSleepTimerRef.current) clearTimeout(releaseSleepTimerRef.current);
+      if (typeof window !== "undefined" && prevTaskActiveRef.current) {
+        window.piNative?.allowSleep?.();
+      }
+      prevTaskActiveRef.current = null;
+    };
+  }, []);
+
   const clearAgentRunningLocal = useCallback(() => {
     setAgentRunning(false);
     setAgentPhase(null);
