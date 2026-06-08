@@ -106,23 +106,6 @@ export function WorkbenchSettings({
         <WebFetchSettings />
         <ScenePackControls />
 
-        <section className="mt-6">
-          <div className="mb-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0] text-text-dim">{t("workbenchSettings.about")}</div>
-          </div>
-          <div className="rounded-[8px] border border-border bg-bg-panel px-4 py-4 text-[12px] leading-6 text-text-muted">
-            <p className="m-0">{t("workbenchSettings.aboutDescription")}</p>
-            <p className="mb-0 mt-3 text-text">
-              {t("workbenchSettings.piWebVersion")}{" "}
-              <span className="font-mono">v{process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}</span>
-            </p>
-            <p className="mb-0 mt-1 text-text">
-              {t("workbenchSettings.piCodingAgentVersion")}{" "}
-              <span className="font-mono">v{process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}</span>
-            </p>
-          </div>
-        </section>
-
         <RemoteAccessSettings />
       </div>
     </div>

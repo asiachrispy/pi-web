@@ -281,10 +281,6 @@ export const zhCN = {
     openChat: "打开聊天",
   },
   workbenchSettings: {
-    about: "关于",
-    aboutDescription: "当前 pi-web 安装所包含的版本信息。",
-    piWebVersion: "pi-web",
-    piCodingAgentVersion: "pi-coding-agent",
     platform: "平台",
     settings: "设置",
     language: "语言",

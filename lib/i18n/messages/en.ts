@@ -282,10 +282,6 @@ export const en = {
     openChat: "Open chat",
   },
   workbenchSettings: {
-    about: "About",
-    aboutDescription: "Versions bundled with this pi-web install.",
-    piWebVersion: "pi-web",
-    piCodingAgentVersion: "pi-coding-agent",
     platform: "Platform",
     settings: "Settings",
     language: "Language",
