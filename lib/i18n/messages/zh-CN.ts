@@ -410,6 +410,8 @@ export const zhCN = {
     htmlPreview: "HTML 预览",
     copyAsImage: "复制图片",
     saveAsImage: "保存图片",
+    copyAsImageShort: "复制",
+    saveAsImageShort: "保存",
     copyPreviewImage: "复制预览为图片",
     savePreviewImage: "保存预览为图片",
     exportingImage: "导出中...",

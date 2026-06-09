@@ -411,6 +411,8 @@ export const en = {
     htmlPreview: "HTML preview",
     copyAsImage: "Copy image",
     saveAsImage: "Save image",
+    copyAsImageShort: "Copy",
+    saveAsImageShort: "Save",
     copyPreviewImage: "Copy preview as image",
     savePreviewImage: "Save preview as image",
     exportingImage: "Exporting...",

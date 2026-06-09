@@ -145,7 +145,7 @@ function PreviewImageActions({
         type="button"
         onClick={copyImage}
         disabled={busy !== null}
-        title={t("fileViewer.copyPreviewImage")}
+        title={t("fileViewer.copyAsImage")}
         style={{ ...headerButtonStyle(status === "copied"), opacity: busy ? 0.65 : 1, cursor: busy ? "not-allowed" : "pointer" }}
       >
         {busy === "copy"
@@ -154,20 +154,20 @@ function PreviewImageActions({
           ? t("fileViewer.copiedImage")
           : status === "fallbackSaved"
           ? t("fileViewer.savedImage")
-          : t("fileViewer.copyAsImage")}
+          : t("fileViewer.copyAsImageShort")}
       </button>
       <button
         type="button"
         onClick={saveImage}
         disabled={busy !== null}
-        title={t("fileViewer.savePreviewImage")}
+        title={t("fileViewer.saveAsImage")}
         style={{ ...headerButtonStyle(status === "saved"), opacity: busy ? 0.65 : 1, cursor: busy ? "not-allowed" : "pointer" }}
       >
         {busy === "save"
           ? t("fileViewer.exportingImage")
           : status === "saved"
           ? t("fileViewer.savedImage")
-          : t("fileViewer.saveAsImage")}
+          : t("fileViewer.saveAsImageShort")}
       </button>
     </div>
   );
@@ -1005,17 +1005,7 @@ function TextFileViewer({ filePath, cwd, displayLabel }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <FilePreviewHeader
-        title={title}
-        filePath={filePath}
-        badge={data.language}
-        actions={
-          canExportPreviewImage
-            ? <PreviewImageActions getTarget={getPreviewImageTarget} filePath={filePath} />
-            : undefined
-        }
-      />
-      {/* Toolbar */}
+      {/* Single-row header + toolbar (merged) */}
       <div
         style={{
           display: "flex",
@@ -1029,7 +1019,21 @@ function TextFileViewer({ filePath, cwd, displayLabel }: Props) {
           flexShrink: 0,
         }}
       >
-        <span style={{ marginLeft: "auto" }}>{data.language}</span>
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            color: "var(--text)",
+            fontSize: 12,
+          }}
+          title={filePath}
+        >
+          {title}
+        </span>
+        <span style={{ flexShrink: 0 }}>{data.language}</span>
         {viewMode === "source" && <span>{lines.length} lines</span>}
         <span>{formatSize(data.size)}</span>
 
@@ -1150,6 +1154,33 @@ function TextFileViewer({ filePath, cwd, displayLabel }: Props) {
               {t("fileViewer.raw")}
             </button>
           </div>
+        )}
+
+        {/* Preview image export actions — merged from header so the row stays single-line */}
+        {canExportPreviewImage && (
+          <PreviewImageActions getTarget={getPreviewImageTarget} filePath={filePath} />
+        )}
+
+        {/* Open with default system app — moved from FilePreviewHeader so the row stays single-line */}
+        {canOpenWithSystemApp() && (
+          <button
+            type="button"
+            onClick={() => void openFileWithSystemApp(filePath)}
+            title={filePath}
+            style={{
+              flexShrink: 0,
+              padding: "4px 10px",
+              fontSize: 11,
+              borderRadius: 6,
+              border: "1px solid var(--border)",
+              background: "var(--bg-hover)",
+              color: "var(--text)",
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+          >
+            {t("fileViewer.openExternally")}
+          </button>
         )}
       </div>
 
