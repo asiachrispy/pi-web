@@ -1,6 +1,8 @@
+import { isAbsolute, resolve } from "node:path";
 import { SessionManager, buildSessionContext as piBuildSessionContext, getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { SessionEntry, SessionInfo, SessionContext, SessionTreeNode, AssistantMessage } from "./types";
+import type { SessionEntry, SessionInfo, SessionContext, SessionTreeNode, SessionMessageEntry, AssistantMessage } from "./types";
 import type { SessionEntry as PiSessionEntry, SessionInfo as PiSessionInfo } from "@earendil-works/pi-coding-agent";
+import { extractFileRefsFromText } from "./message-file-refs";
 import { normalizeToolCalls } from "./normalize";
 
 export { getAgentDir };
@@ -65,6 +67,94 @@ export function invalidateSessionPathCache(sessionId: string): void {
 export function getSessionEntries(filePath: string): SessionEntry[] {
   const entries = SessionManager.open(filePath).getEntries();
   return entries as unknown as SessionEntry[];
+}
+
+// Short-TTL cache of files referenced per session, keyed by session id. Scanning
+// a whole transcript on every preview request would be wasteful; 5s matches the
+// allowed-roots cache and is short enough that newly-touched files appear fast.
+declare global {
+  var __piSessionRefFilesCache: Map<string, { files: Set<string>; expiresAt: number }> | undefined;
+}
+
+const SESSION_REF_FILES_TTL_MS = 5_000;
+const TOOL_FILE_PATH_KEYS = ["path", "file_path", "filePath", "notebook_path", "notebookPath"];
+
+function getRefFilesCache(): Map<string, { files: Set<string>; expiresAt: number }> {
+  if (!globalThis.__piSessionRefFilesCache) globalThis.__piSessionRefFilesCache = new Map();
+  return globalThis.__piSessionRefFilesCache;
+}
+
+/**
+ * Collect absolute file paths the agent referenced in a session: file-reference
+ * tags inside user/assistant text plus file-path arguments of tool calls.
+ * Relative paths are resolved against the session cwd. Lets the file preview open
+ * files the conversation actually touched even when they sit outside the
+ * cwd-derived allowed roots. Cached briefly to avoid rescanning transcripts.
+ */
+export async function collectSessionReferencedFiles(sessionId: string): Promise<Set<string>> {
+  const now = Date.now();
+  const cache = getRefFilesCache();
+  const cached = cache.get(sessionId);
+  if (cached && cached.expiresAt > now) return cached.files;
+
+  const files = new Set<string>();
+  const store = (): Set<string> => {
+    cache.set(sessionId, { files, expiresAt: now + SESSION_REF_FILES_TTL_MS });
+    return files;
+  };
+
+  const filePath = await resolveSessionPath(sessionId);
+  if (!filePath) return store();
+
+  let cwd: string | undefined;
+  try {
+    const sessions = await listAllSessions();
+    cwd = sessions.find((s) => s.id === sessionId)?.cwd;
+  } catch {
+    // Without a cwd we simply skip relative paths below.
+  }
+
+  let entries: SessionEntry[];
+  try {
+    entries = getSessionEntries(filePath);
+  } catch {
+    return store();
+  }
+
+  const addRaw = (raw: unknown): void => {
+    if (typeof raw !== "string") return;
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    if (isAbsolute(trimmed)) files.add(resolve(trimmed));
+    else if (cwd) files.add(resolve(cwd, trimmed));
+  };
+  const addFromText = (text: string): void => {
+    for (const ref of extractFileRefsFromText(text)) addRaw(ref.path);
+  };
+
+  for (const entry of entries) {
+    if (entry.type !== "message") continue;
+    const message = (entry as SessionMessageEntry).message;
+    if (!message) continue;
+    if (message.role === "user" || message.role === "custom") {
+      const content = message.content;
+      if (typeof content === "string") addFromText(content);
+      else for (const block of content) if (block.type === "text") addFromText(block.text);
+    } else if (message.role === "assistant") {
+      for (const block of message.content) {
+        if (block.type === "text") {
+          addFromText(block.text);
+        } else if (block.type === "toolCall") {
+          const input = block.input ?? {};
+          for (const key of TOOL_FILE_PATH_KEYS) {
+            if (key in input) addRaw((input as Record<string, unknown>)[key]);
+          }
+        }
+      }
+    }
+  }
+
+  return store();
 }
 
 export function buildTree(entries: SessionEntry[]): SessionTreeNode[] {

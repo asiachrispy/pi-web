@@ -7,6 +7,7 @@ import {
   filePathFromSegments,
   isPathAllowed,
   isRealPathAllowed,
+  isReferencedFileAllowed,
   parseByteRange,
 } from "./file-access";
 
@@ -77,5 +78,30 @@ describe("file access helpers", () => {
     expect(parseByteRange("bytes=-", 100)).toEqual({ error: "invalid" });
     expect(parseByteRange("bytes=50-40", 100)).toEqual({ error: "unsatisfiable" });
     expect(parseByteRange("bytes=100-120", 100)).toEqual({ error: "unsatisfiable" });
+  });
+
+  it("allows files the agent referenced in the session", () => {
+    const dir = makeTempDir("pi-ref-");
+    const referenced = join(dir, "report.md");
+    const other = join(dir, "private.md");
+    writeFileSync(referenced, "ref");
+    writeFileSync(other, "nope");
+
+    const refs = new Set([referenced]);
+    expect(isReferencedFileAllowed(referenced, refs)).toBe(true);
+    expect(isReferencedFileAllowed(other, refs)).toBe(false);
+    expect(isReferencedFileAllowed(referenced, new Set())).toBe(false);
+  });
+
+  it.skipIf(process.platform === "win32")("matches a referenced file through a symlink by realpath", () => {
+    const dir = makeTempDir("pi-ref-");
+    const real = join(dir, "real.md");
+    const link = join(dir, "link.md");
+    writeFileSync(real, "ref");
+    symlinkSync(real, link);
+
+    // Referenced set holds the symlink; opening the real path (and vice versa) is allowed.
+    expect(isReferencedFileAllowed(real, new Set([link]))).toBe(true);
+    expect(isReferencedFileAllowed(link, new Set([real]))).toBe(true);
   });
 });

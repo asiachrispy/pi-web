@@ -63,6 +63,34 @@ export function isRealPathAllowed(target: string, allowedRoots: Set<string>): bo
   return isPathAllowed(realTarget, realRoots);
 }
 
+/**
+ * Allow a file the agent actually referenced in the active session, even when it
+ * sits outside the cwd-derived allowed roots. `referencedFiles` must already hold
+ * absolute paths (resolved against the session cwd). Symlinks are compared by
+ * realpath, so a symlinked target can only resolve to a referenced file — this
+ * cannot be used to escape to an unreferenced path.
+ */
+export function isReferencedFileAllowed(target: string, referencedFiles: Set<string>): boolean {
+  if (referencedFiles.size === 0) return false;
+  if (referencedFiles.has(path.resolve(target))) return true;
+
+  let realTarget: string;
+  try {
+    realTarget = fs.realpathSync(target);
+  } catch {
+    return false;
+  }
+  if (referencedFiles.has(realTarget)) return true;
+  for (const ref of referencedFiles) {
+    try {
+      if (fs.realpathSync(ref) === realTarget) return true;
+    } catch {
+      // Ignore referenced files that no longer exist on disk.
+    }
+  }
+  return false;
+}
+
 export function parseByteRange(rangeHeader: string, size: number): ParsedByteRange {
   const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
   if (!match) return { error: "invalid" };

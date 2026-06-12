@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { listAllSessions } from "@/lib/session-reader";
+import { collectSessionReferencedFiles, listAllSessions } from "@/lib/session-reader";
+import { isReferencedFileAllowed } from "@/lib/file-access";
 
 const IGNORED_NAMES = new Set([
   "node_modules", ".git", ".next", "dist", "build", "__pycache__",
@@ -343,8 +344,15 @@ export async function GET(
     const type = request.nextUrl.searchParams.get("type") ?? "list";
 
     const allowedRoots = await getAllowedRoots();
+    // Files the agent referenced in the active session are allowed even when they
+    // live outside the cwd-derived roots. Only scan the transcript when the path
+    // is not already inside an allowed root.
     if (!isPathAllowed(filePath, allowedRoots)) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      const sessionId = request.nextUrl.searchParams.get("sessionId");
+      const referenced = sessionId ? await collectSessionReferencedFiles(sessionId) : new Set<string>();
+      if (!isReferencedFileAllowed(filePath, referenced)) {
+        return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      }
     }
 
     let stat: fs.Stats;
